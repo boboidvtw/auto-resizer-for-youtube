@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube Auto Resizer</title>
+  <link rel="stylesheet" href="popup.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="card">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">
+        <svg class="youtube-icon" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+        </svg>
+        <div class="title-group">
+          <h1>Auto Resizer</h1>
+          <span class="badge">v2.1</span>
+        </div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="enabled-toggle" checked>
+        <span class="slider"></span>
+      </label>
+    </header>
+
+    <!-- Main Settings -->
+    <main class="content">
+      <!-- Quality Selector -->
+      <section class="section">
+        <label class="section-label">預設優先畫質</label>
+        <select id="quality-select" class="select-input">
+          <option value="2160p">4K (2160p)</option>
+          <option value="1440p">2K (1440p)</option>
+          <option value="1080p" selected>Full HD (1080p)</option>
+          <option value="720p">HD (720p)</option>
+          <option value="480p">SD (480p)</option>
+          <option value="auto">Auto (自動)</option>
+        </select>
+      </section>
+
+      <!-- Resize Mode -->
+      <section class="section">
+        <label class="section-label">播放器尺寸縮放模式</label>
+        <div class="mode-options">
+          <label class="mode-card">
+            <input type="radio" name="resizeMode" value="autoByQuality" checked>
+            <div class="mode-box">
+              <span class="mode-title">⚡ 依畫質自動匹配尺寸</span>
+              <span class="mode-desc">4K/2K 滿版視窗、1080p 劇院、720p 預設</span>
+            </div>
+          </label>
+          <label class="mode-card">
+            <input type="radio" name="resizeMode" value="fitWindow">
+            <div class="mode-box">
+              <span class="mode-title">強制視窗貼合 (Fit)</span>
+              <span class="mode-desc">所有畫質皆滿版貼合</span>
+            </div>
+          </label>
+          <label class="mode-card">
+            <input type="radio" name="resizeMode" value="theater">
+            <div class="mode-box">
+              <span class="mode-title">強制劇院模式</span>
+              <span class="mode-desc">標準劇院寬螢幕</span>
+            </div>
+          </label>
+          <label class="mode-card">
+            <input type="radio" name="resizeMode" value="default">
+            <div class="mode-box">
+              <span class="mode-title">預設小圖</span>
+              <span class="mode-desc">維持 YouTube 原生尺寸</span>
+            </div>
+          </label>
+        </div>
+      </section>
+
+      <!-- Extra Toggles -->
+      <section class="section checklist">
+        <label class="checkbox-label">
+          <input type="checkbox" id="removeSideGaps-toggle" checked>
+          <span>自動消除播放器兩側留白區</span>
+        </label>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="status-indicator">
+        <span class="dot"></span>
+        <span id="status-text">運作中</span>
+      </div>
+      <div class="sponsor-link">
+        <a href="https://www.paypal.me/boboidvtw" target="_blank" rel="noopener noreferrer">❤️ 支持贊助</a>
+      </div>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

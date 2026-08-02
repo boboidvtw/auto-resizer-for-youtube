@@ -1,0 +1,241 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  width: 320px;
+  background-color: #0f0f12;
+  color: #f1f1f5;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  user-select: none;
+}
+
+.card {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.youtube-icon {
+  width: 24px;
+  height: 24px;
+  color: #ff0033;
+}
+
+.title-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.title-group h1 {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+.badge {
+  background: rgba(255, 0, 51, 0.15);
+  color: #ff3355;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+/* Switch Toggle */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #2a2a35;
+  transition: .3s;
+  border-radius: 22px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .3s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #ff0033;
+}
+
+input:checked + .slider:before {
+  transform: translateX(18px);
+}
+
+/* Content */
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #8e8e99;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Select input */
+.select-input {
+  width: 100%;
+  background-color: #1a1a22;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.select-input:hover, .select-input:focus {
+  border-color: #ff0033;
+}
+
+/* Mode options */
+.mode-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mode-card {
+  cursor: pointer;
+}
+
+.mode-card input {
+  display: none;
+}
+
+.mode-box {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  background: #181820;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.mode-card input:checked + .mode-box {
+  background: rgba(255, 0, 51, 0.08);
+  border-color: #ff0033;
+}
+
+.mode-title {
+  font-weight: 600;
+  font-size: 12px;
+  color: #f1f1f5;
+}
+
+.mode-desc {
+  font-size: 10.5px;
+  color: #7b7b88;
+  margin-top: 2px;
+}
+
+/* Checklist */
+.checklist {
+  padding-top: 4px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #c5c5d0;
+  cursor: pointer;
+}
+
+.checkbox-label input {
+  accent-color: #ff0033;
+  width: 14px;
+  height: 14px;
+}
+
+/* Footer */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #8e8e99;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  background-color: #00e676;
+  border-radius: 50%;
+}
+
+.sponsor-link a {
+  color: #ff3355;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.sponsor-link a:hover {
+  text-decoration: underline;
+}
