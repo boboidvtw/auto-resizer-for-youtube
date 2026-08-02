@@ -61,7 +61,7 @@ function yarBorderBoxCss() {
 /** 兩欄版面（零留白）規則 — 僅在 YouTube 自己判定為兩欄時套用 */
 function yarTwoColumnCss() {
   return `
-      ytd-watch-flexy[is-two-columns_] #columns.ytd-watch-flexy {
+      ytd-watch-flexy[is-two-columns_]:not([theater]) #columns.ytd-watch-flexy {
         max-width: none !important;
         width: 100% !important;
         margin-left: 0 !important;
@@ -73,8 +73,8 @@ function yarTwoColumnCss() {
         gap: ${YAR_LAYOUT.COLUMN_GAP}px !important;
         padding: 0 ${YAR_LAYOUT.PAGE_PADDING / 2}px !important;
       }
-      ytd-watch-flexy[is-two-columns_] #primary.ytd-watch-flexy,
-      ytd-watch-flexy[is-two-columns_] #primary-inner {
+      ytd-watch-flexy[is-two-columns_]:not([theater]) #primary.ytd-watch-flexy,
+      ytd-watch-flexy[is-two-columns_]:not([theater]) #primary-inner {
         width: var(--yar-player-w) !important;
         max-width: var(--yar-player-w) !important;
         min-width: 0 !important;
@@ -83,7 +83,7 @@ function yarTwoColumnCss() {
         padding-left: 0 !important;
         padding-right: 0 !important;
       }
-      ytd-watch-flexy[is-two-columns_] #secondary.ytd-watch-flexy {
+      ytd-watch-flexy[is-two-columns_]:not([theater]) #secondary.ytd-watch-flexy {
         width: ${YAR_LAYOUT.SIDEBAR_WIDTH}px !important;
         min-width: 0 !important;
         max-width: ${YAR_LAYOUT.SIDEBAR_WIDTH}px !important;
@@ -154,12 +154,13 @@ function yarBuildPlayerCss(settings, quality) {
     columnCss = yarBorderBoxCss() + yarTwoColumnCss();
   }
 
-  // 劇院模式一律單欄；其餘模式跟著 YouTube 自己的兩欄斷點走，
-  // 視窗變窄而 YouTube 收成單欄時不再硬扣側欄寬度。
+  // 只有「YouTube 自己判定為兩欄」且「不在原生劇院／滿版模式」時才扣側欄寬度。
+  // 少了 :not([theater]) 這一段，使用者切到 YouTube 原生劇院模式時播放器會被縮成
+  // 兩欄寬度並靠左，右側留下一大片黑邊——正好是「零留白」的反效果。
   const twoColumnOverride = isTheater
     ? ''
     : `
-      ytd-watch-flexy[is-two-columns_] {
+      ytd-watch-flexy[is-two-columns_]:not([theater]):not([full-bleed-player]) {
         --yar-player-w: ${twoColumnWidth};
       }`;
 
@@ -230,6 +231,16 @@ ${twoColumnOverride}
         display: block !important;
         visibility: visible !important;
         opacity: 1 !important;
+      }
+
+      /*
+       * YouTube 原生劇院／滿版模式下播放器改掛在 #player-full-bleed-container，
+       * 該容器高度由子元素撐開；子元素被我們固定高度後它會塌陷成 0px，
+       * 讓下方的 #columns 位置錯亂，因此一併給它相同高度。
+       */
+      ytd-watch-flexy[full-bleed-player] #player-full-bleed-container {
+        height: var(--yar-player-h) !important;
+        min-height: var(--yar-player-h) !important;
       }
 
       /*

@@ -108,6 +108,9 @@ test('預留空間：單欄只扣內距與捲軸，兩欄再扣側欄', () => {
 
 const settingsFor = (overrides) => sandbox.yarNormalizeSettings(Object.assign({}, overrides));
 
+/** 剝掉註解再斷言，避免說明文字裡的選擇器名稱造成誤判 */
+const cssOnly = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
+
 test('yarBuildPlayerCss: 停用或 default 模式一律回傳空字串', () => {
   assert.strictEqual(sandbox.yarBuildPlayerCss(settingsFor({ enabled: false }), 'hd2160'), '');
   assert.strictEqual(sandbox.yarBuildPlayerCss(settingsFor({ resizeMode: 'default' }), 'hd2160'), '');
@@ -145,8 +148,8 @@ test('yarBuildPlayerCss: 高度一律由寬度以 16:9 推導', () => {
 });
 
 test('yarBuildPlayerCss: 側欄寬度只在 YouTube 判定為兩欄時才扣除', () => {
-  const css = sandbox.yarBuildPlayerCss(settingsFor({}), 'hd1080');
-  const twoColumnRule = css.match(/ytd-watch-flexy\[is-two-columns_\] \{[^}]*\}/);
+  const css = cssOnly(sandbox.yarBuildPlayerCss(settingsFor({}), 'hd1080'));
+  const twoColumnRule = css.match(/ytd-watch-flexy\[is-two-columns_\][^{]*\{[^}]*\}/);
   assert.ok(twoColumnRule, '應有 [is-two-columns_] 覆寫規則');
   assert.match(twoColumnRule[0], /calc\(100vw - 472px\)/);
   // 基礎規則（單欄）不得扣掉側欄，否則窄視窗下播放器會縮得比需要更小
@@ -161,8 +164,8 @@ test('yarBuildPlayerCss: 接管寬度的容器一律 border-box（避免 padding
 });
 
 test('yarBuildPlayerCss: 劇院模式不套用兩欄側欄扣除', () => {
-  const css = sandbox.yarBuildPlayerCss(settingsFor({ resizeMode: 'theater' }), 'hd1080');
-  assert.doesNotMatch(css, /ytd-watch-flexy\[is-two-columns_\] \{/);
+  const css = cssOnly(sandbox.yarBuildPlayerCss(settingsFor({ resizeMode: 'theater' }), 'hd1080'));
+  assert.doesNotMatch(css, /ytd-watch-flexy\[is-two-columns_\][^{]*\{\s*--yar-player-w/);
 });
 
 test('yarBuildPlayerCss: 劇院模式改為單欄堆疊', () => {
@@ -172,13 +175,13 @@ test('yarBuildPlayerCss: 劇院模式改為單欄堆疊', () => {
 });
 
 test('yarBuildPlayerCss: 關閉零留白時不干預頁面欄位版面', () => {
-  const css = sandbox.yarBuildPlayerCss(settingsFor({ removeSideGaps: false }), 'hd1080');
+  const css = cssOnly(sandbox.yarBuildPlayerCss(settingsFor({ removeSideGaps: false }), 'hd1080'));
   assert.doesNotMatch(css, /#columns/);
   assert.match(css, /--yar-player-w/, '仍應設定播放器尺寸');
 });
 
 test('yarBuildPlayerCss: 所有版面選擇器都限縮在 watch 頁元件下', () => {
-  const css = sandbox.yarBuildPlayerCss(settingsFor({}), 'hd1080');
+  const css = cssOnly(sandbox.yarBuildPlayerCss(settingsFor({}), 'hd1080'));
   const globalSelectors = css
     .split('\n')
     .map((line) => line.trim())
@@ -216,4 +219,25 @@ test('yarBuildEmbedUrl: 拒絕會污染 URL 的 videoId', () => {
   ['', 'short', 'aqz-KE-bpKQ&x=1', '../../evil', 'javascript:alert(1)', null, 42, 'a'.repeat(50)].forEach((bad) => {
     assert.strictEqual(worker.yarBuildEmbedUrl(bad, 0), null, `應拒絕: ${String(bad)}`);
   });
+});
+
+test('yarBuildPlayerCss: YouTube 原生劇院/滿版模式不套用兩欄扣除', () => {
+  const css = cssOnly(sandbox.yarBuildPlayerCss(settingsFor({}), 'hd1080'));
+  const override = css.match(/ytd-watch-flexy\[is-two-columns_\][^{]*\{/);
+  assert.ok(override, '應有兩欄覆寫規則');
+  assert.match(override[0], /:not\(\[theater\]\)/, '必須排除原生劇院模式');
+  assert.match(override[0], /:not\(\[full-bleed-player\]\)/, '必須排除滿版播放器模式');
+
+  // 兩欄版面規則同樣不得在劇院模式下生效
+  css.split('\n').filter((l) => l.includes('#columns') || l.includes('#primary.') || l.includes('#secondary.'))
+    .forEach((line) => {
+      if (line.includes('[is-two-columns_]')) {
+        assert.match(line, /:not\(\[theater\]\)/, `兩欄版面選擇器需排除劇院模式: ${line.trim()}`);
+      }
+    });
+});
+
+test('yarBuildPlayerCss: 滿版容器需被撐開，避免高度塌陷', () => {
+  const css = sandbox.yarBuildPlayerCss(settingsFor({}), 'hd1080');
+  assert.match(css, /#player-full-bleed-container \{[^}]*height: var\(--yar-player-h\)/);
 });
