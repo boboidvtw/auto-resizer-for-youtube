@@ -199,6 +199,7 @@
       }
 
       /* Force HTML5 video stream to stretch to 100% of player container */
+      ytd-watch-flexy .html5-video-container,
       ytd-watch-flexy .html5-main-video,
       ytd-watch-flexy video.video-stream,
       ytd-watch-flexy #movie_player video {
