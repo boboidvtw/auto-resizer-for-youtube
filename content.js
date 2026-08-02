@@ -116,6 +116,13 @@
       return;
     }
 
+    const isWatchPage = window.location.pathname.startsWith('/watch') || !!document.querySelector('ytd-watch-flexy');
+    if (!isWatchPage) {
+      console.log('[YouTube Auto Resizer] Not on a watch page, clearing dynamic style.');
+      if (styleEl) styleEl.textContent = '';
+      return;
+    }
+
     ensureStyleAttached();
 
     const qMap = activeSettings.qualityMap || DEFAULT_SETTINGS.qualityMap;
@@ -156,9 +163,9 @@
 
     console.log(`[YouTube Auto Resizer] Applying Scenario C player size: ${targetW}x${targetH} (Quality: ${quality})`);
 
-    // Inject CSS rule overriding player container & inner HTML5 video stream dimensions
+    // Inject CSS rule overriding player container & inner HTML5 video stream dimensions - strictly scoped to ytd-watch-flexy
     styleEl.textContent = `
-      /* YouTube polymer layout variables */
+      /* YouTube polymer layout variables - scoped to watch page */
       ytd-watch-flexy,
       ytd-watch-flexy[flexy],
       ytd-watch-flexy[is-two-columns_] {
@@ -170,7 +177,7 @@
         --yt-player-height: ${targetH}px !important;
       }
 
-      /* Container exact 16:9 sizing with high specificity and zero min-width override */
+      /* Container exact 16:9 sizing with high specificity - scoped to ytd-watch-flexy */
       ytd-watch-flexy[flexy] #player-container-outer.ytd-watch-flexy,
       ytd-watch-flexy[flexy] #player-container-inner.ytd-watch-flexy,
       ytd-watch-flexy[flexy] #player-container.ytd-watch-flexy,
@@ -178,9 +185,9 @@
       ytd-watch-flexy #player-container-inner,
       ytd-watch-flexy #player-container,
       ytd-watch-flexy #player,
-      #ytd-player,
-      #movie_player:not(.ytp-fullscreen),
-      .html5-video-player:not(.ytp-fullscreen) {
+      ytd-watch-flexy #ytd-player,
+      ytd-watch-flexy #movie_player:not(.ytp-fullscreen),
+      ytd-watch-flexy .html5-video-player:not(.ytp-fullscreen) {
         width: ${targetW}px !important;
         height: ${targetH}px !important;
         min-width: 0 !important;
@@ -192,9 +199,9 @@
       }
 
       /* Force HTML5 video stream to stretch to 100% of player container */
-      .html5-main-video,
-      video.video-stream,
-      #movie_player video {
+      ytd-watch-flexy .html5-main-video,
+      ytd-watch-flexy video.video-stream,
+      ytd-watch-flexy #movie_player video {
         width: 100% !important;
         height: 100% !important;
         top: 0 !important;
@@ -218,7 +225,7 @@
       ytd-watch-flexy #player-full-bleed-container,
       ytd-watch-flexy #full-bleed-container,
       ytd-watch-flexy #ytd-player,
-      #movie_player {
+      ytd-watch-flexy #movie_player {
         display: block !important;
         visibility: visible !important;
         opacity: 1 !important;
@@ -230,10 +237,16 @@
         z-index: 999999 !important;
       }
 
-      /* Page Layout Zero-Gap Auto-Adaptation & Left Alignment */
-      #page-manager.ytd-app {
-        margin-top: 0 !important;
+      /* Guide drawer left sidebar fix: solid background and high z-index stacking */
+      tp-yt-app-drawer#guide,
+      ytd-guide-renderer,
+      #guide-wrapper,
+      #guide-content {
+        background-color: var(--yt-spec-base-background, #0f0f0f) !important;
+        z-index: 99999 !important;
       }
+
+      /* Page Layout Zero-Gap Auto-Adaptation & Left Alignment - strictly scoped under ytd-watch-flexy */
       ytd-watch-flexy #columns.ytd-watch-flexy {
         max-width: none !important;
         width: 100% !important;
@@ -301,6 +314,18 @@
 
   document.addEventListener('YT_AUTO_RESIZER_QUALITY_CHANGED', handleQualityChange);
   window.addEventListener('YT_AUTO_RESIZER_QUALITY_CHANGED', handleQualityChange);
+
+  function handlePageNavigation() {
+    const isWatchPage = window.location.pathname.startsWith('/watch') || !!document.querySelector('ytd-watch-flexy');
+    if (!isWatchPage && styleEl) {
+      styleEl.textContent = '';
+      lastAppliedQuality = null;
+    }
+  }
+
+  document.addEventListener('yt-navigate-finish', handlePageNavigation);
+  document.addEventListener('yt-page-data-updated', handlePageNavigation);
+  window.addEventListener('popstate', handlePageNavigation);
 
   // Inject Pop-up Player Button in YouTube Control Bar with TrustedTypes safe DOM elements
   function injectPopupButton() {

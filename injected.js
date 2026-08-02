@@ -16,6 +16,9 @@
   }
 
   function checkQualityAndSize() {
+    const isWatchPage = window.location.pathname.startsWith('/watch') || !!document.querySelector('ytd-watch-flexy');
+    if (!isWatchPage) return;
+
     const moviePlayer = document.getElementById('movie_player');
     const video = document.querySelector('video');
     
