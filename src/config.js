@@ -34,24 +34,34 @@ const YAR_LAYOUT = {
 const YAR_WINDOW_RESIZE_COOLDOWN_MS = 1500;
 
 /**
- * 依畫質算出視窗尺寸，並等比縮到螢幕可用範圍內。
- * 只夾寬度不夾高度會讓視窗長過螢幕（1920 寬 -> 1080 高 > 多數筆電的可用高度）。
+ * 依畫質算出視窗尺寸，讓「內容區」剛好等於影片長寬比。
+ *
+ * 兩個容易做錯的地方：
+ * 1. 只夾寬度不夾高度 —— 1920 寬會算出 1080 高，超過多數筆電的可用高度。
+ * 2. 把視窗外框一起等比縮放 —— 外框（標題列、網址列）是固定像素，不會隨視窗變小而變小。
+ *    連同外框一起縮，內容區就不再是影片的長寬比，播放器上下或左右會出現黑邊。
+ *    正確做法是先扣掉外框，只對內容區做夾擠。
+ *
  * @param {number} playerWidth 畫質對應的播放器原生寬度
- * @param {number} extraWidth  視窗比播放器多出的寬度（側欄等）
- * @param {number} extraHeight 視窗比播放器多出的高度（標題列等）
+ * @param {number} extraWidth  視窗比內容區多出的寬度（側欄 + 視窗邊框）
+ * @param {number} extraHeight 視窗比內容區多出的高度（標題列 / 網址列等）
  * @param {number} availWidth  螢幕可用寬
  * @param {number} availHeight 螢幕可用高
+ * @param {number} [aspectRatio=16/9] 影片長寬比
  * @returns {{width: number, height: number}}
  */
-function yarFitWindowSize(playerWidth, extraWidth, extraHeight, availWidth, availHeight) {
-  const wanted = {
-    width: playerWidth + extraWidth,
-    height: Math.round((playerWidth * 9) / 16) + extraHeight
-  };
-  const scale = Math.min(1, availWidth / wanted.width, availHeight / wanted.height);
+function yarFitWindowSize(playerWidth, extraWidth, extraHeight, availWidth, availHeight, aspectRatio) {
+  const ratio = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 16 / 9;
+
+  const roomWidth = Math.max(YAR_LAYOUT.MIN_PLAYER_WIDTH, availWidth - extraWidth);
+  const roomHeight = Math.max(1, availHeight - extraHeight);
+
+  const contentWidth = Math.min(playerWidth, roomWidth, roomHeight * ratio);
+  const contentHeight = contentWidth / ratio;
+
   return {
-    width: Math.round(wanted.width * scale),
-    height: Math.round(wanted.height * scale)
+    width: Math.round(contentWidth + extraWidth),
+    height: Math.round(contentHeight + extraHeight)
   };
 }
 

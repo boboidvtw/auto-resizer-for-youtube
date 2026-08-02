@@ -18,8 +18,12 @@
   let settings = yarNormalizeSettings(null);
   let lastQuality = null;
   let lastVideoId = null;
+  let lastVideoW = 0;
+  let lastVideoH = 0;
   let qualityLockedFor = null;
-  let resizedWindowFor = null;
+  // 記錄「上次送出的視窗尺寸」而非畫質：彈出視窗第一次是用估計的外框高度開的，
+  // 載入後量到真實外框才能算出正確尺寸並再送一次校正，用畫質去防重複會擋掉這次校正。
+  let lastSentWindowSize = '';
   let lastWindowResizeAt = 0;
   let buttonRetries = 0;
   let buttonTimer = null;
@@ -72,7 +76,7 @@
   function adoptSettings(next) {
     settings = yarNormalizeSettings(next);
     qualityLockedFor = null;   // 設定變更後允許重新鎖定畫質
-    resizedWindowFor = null;
+    lastSentWindowSize = '';
     applyPlayerLayout();
     pushPreferredQuality();
     requestMainWorldState();
@@ -136,18 +140,43 @@
   // ------------------------------------------------------- 瀏覽器視窗同步
 
   /**
+   * 實測視窗外框（標題列、分頁列、網址列…）佔掉的尺寸。
+   * 這個值無法事先猜：一般視窗有分頁列與網址列（實測 171px），彈出視窗只有標題列，
+   * 而且隨平台與瀏覽器而異。猜錯的直接後果就是內容區不是 16:9、影片上下或左右出現黑邊。
+   * @returns {{width: number, height: number}|null} 尚未量得可信值時回傳 null
+   */
+  function measuredWindowChrome() {
+    const extraWidth = window.outerWidth - window.innerWidth;
+    const extraHeight = window.outerHeight - window.innerHeight;
+    if (!Number.isFinite(extraWidth) || !Number.isFinite(extraHeight)) return null;
+    if (extraWidth < 0 || extraHeight <= 0) return null;
+    return { width: extraWidth, height: extraHeight };
+  }
+
+  /** 影片實際長寬比；取不到時退回 16:9 */
+  function currentAspectRatio() {
+    if (lastVideoW > 0 && lastVideoH > 0) return lastVideoW / lastVideoH;
+    return 16 / 9;
+  }
+
+  /**
    * 依目前畫質算出視窗該有的尺寸。
    * 這裡用 screen.avail* 是正確的：目標是實體螢幕上的「瀏覽器視窗」，
    * 而非頁面版面（版面用的是 CSS 的 100vw/100vh）。
    */
   function windowSizeForQuality(isPopup) {
     const playerWidth = YAR_QUALITY_WIDTH[lastQuality] || YAR_QUALITY_WIDTH.hd1080;
-    const extraWidth = isPopup
+    const measured = measuredWindowChrome();
+
+    const contentExtraWidth = isPopup
       ? 0
       : YAR_LAYOUT.SIDEBAR_WIDTH + YAR_LAYOUT.COLUMN_GAP + YAR_LAYOUT.PAGE_PADDING + YAR_LAYOUT.SCROLLBAR_RESERVE;
-    const extraHeight = isPopup
+    const fallbackChromeHeight = isPopup
       ? YAR_LAYOUT.POPUP_CHROME_HEIGHT
       : YAR_LAYOUT.MASTHEAD_HEIGHT + YAR_LAYOUT.WINDOW_CHROME_HEIGHT;
+
+    const extraWidth = contentExtraWidth + (measured ? measured.width : 0);
+    const extraHeight = measured ? measured.height : fallbackChromeHeight;
 
     const screenInfo = window.screen || {};
     return yarFitWindowSize(
@@ -155,7 +184,8 @@
       extraWidth,
       extraHeight,
       screenInfo.availWidth || playerWidth + extraWidth,
-      screenInfo.availHeight || Math.round((playerWidth * 9) / 16) + extraHeight
+      screenInfo.availHeight || Math.round(playerWidth / currentAspectRatio()) + extraHeight,
+      currentAspectRatio()
     );
   }
 
@@ -167,19 +197,31 @@
     if (!isWatchPage()) return;
     const isPopup = isPopupPlayerWindow();
     if (!isPopup && (!settings.resizeMainWindow || !settings.enabled)) return;
-    if (resizedWindowFor === lastQuality) return;
     if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) return;
+
+    const size = windowSizeForQuality(isPopup);
+    const signature = `${size.width}x${size.height}`;
+    if (signature === lastSentWindowSize) return;
 
     const now = Date.now();
     if (now - lastWindowResizeAt < YAR_WINDOW_RESIZE_COOLDOWN_MS) return;
 
-    resizedWindowFor = lastQuality;
+    lastSentWindowSize = signature;
     lastWindowResizeAt = now;
     chrome.runtime.sendMessage(
-      Object.assign({ action: YAR_MSG.RESIZE_WINDOW }, windowSizeForQuality(isPopup)),
+      Object.assign({ action: YAR_MSG.RESIZE_WINDOW }, size),
       () => void chrome.runtime.lastError
     );
-    yarLog('要求調整視窗尺寸', lastQuality, windowSizeForQuality(isPopup));
+    yarLog('要求調整視窗尺寸', lastQuality, signature);
+  }
+
+  /**
+   * 彈出視窗剛開啟時 innerWidth/innerHeight 還在變動，量到的外框尺寸不可信。
+   * 視窗尺寸穩定後再校正一次，讓內容區精準等於影片長寬比。
+   */
+  function scheduleWindowCalibration() {
+    if (!isPopupPlayerWindow()) return;
+    [400, 1200, 2500].forEach((delay) => setTimeout(syncBrowserWindow, delay));
   }
 
   // ------------------------------------------------ 主世界畫質事件接收
@@ -191,13 +233,18 @@
     if (detail.videoId && detail.videoId !== lastVideoId) {
       lastVideoId = detail.videoId;
       qualityLockedFor = null;
-      resizedWindowFor = null;
+      lastSentWindowSize = '';
     }
     lastQuality = detail.quality;
+    if (detail.videoWidth > 0 && detail.videoHeight > 0) {
+      lastVideoW = detail.videoWidth;
+      lastVideoH = detail.videoHeight;
+    }
 
     applyPlayerLayout();
     pushPreferredQuality();
     syncBrowserWindow();
+    scheduleWindowCalibration();
   }
 
   document.addEventListener(YAR_CHANNEL.QUALITY_CHANGED, handleQualityChange);

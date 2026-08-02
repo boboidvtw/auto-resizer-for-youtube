@@ -274,10 +274,27 @@ test('yarFitWindowSize: 寬與高都必須夾到螢幕可用範圍', () => {
   const popup = sandbox.yarFitWindowSize(1920, 0, 28, 1680, 1050);
   assert.ok(popup.width <= 1680, `寬度需夾到螢幕: ${popup.width}`);
   assert.ok(popup.height <= 1050, `高度需夾到螢幕: ${popup.height}`);
+});
 
-  // 等比縮放：維持 16:9 加上標題列的比例
-  const ratio = (popup.width * 9) / 16 + 28 * (popup.width / 1920);
-  assert.ok(Math.abs(popup.height - ratio) < 2, `應等比縮放，實得 ${popup.height} 期望約 ${Math.round(ratio)}`);
+test('yarFitWindowSize: 內容區必須精準等於長寬比（外框不參與縮放）', () => {
+  // 這是黑邊的根因：把固定像素的視窗外框一起等比縮放，內容區就不再是 16:9
+  [[1920, 0, 28, 1680, 1050], [1920, 0, 171, 1680, 1050], [3840, 456, 120, 1440, 900]].forEach(
+    ([w, ew, eh, aw, ah]) => {
+      const size = sandbox.yarFitWindowSize(w, ew, eh, aw, ah);
+      const contentW = size.width - ew;
+      const contentH = size.height - eh;
+      assert.ok(
+        Math.abs(contentW / contentH - 16 / 9) < 0.01,
+        `內容區應為 16:9，實得 ${contentW}x${contentH} = ${(contentW / contentH).toFixed(3)}`
+      );
+    }
+  );
+});
+
+test('yarFitWindowSize: 支援非 16:9 影片的長寬比', () => {
+  const size = sandbox.yarFitWindowSize(1440, 0, 30, 5000, 5000, 4 / 3);
+  assert.strictEqual(size.width, 1440);
+  assert.strictEqual(size.height, Math.round(1440 / (4 / 3)) + 30);
 });
 
 test('yarFitWindowSize: 螢幕夠大時不放大，維持原生尺寸', () => {
