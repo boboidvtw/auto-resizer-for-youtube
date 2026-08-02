@@ -1,0 +1,13 @@
+.DS_Store
+*.log
+*.png
+node_modules/
+.vscode/
+.idea/
+test_*.js
+diagnose_*.js
+verify_*.js
+check_*.js
+click_*.js
+reload_*.js
+scroll_*.js
