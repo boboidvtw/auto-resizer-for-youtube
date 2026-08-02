@@ -153,7 +153,7 @@ test('yarBuildPlayerCss: 側欄寬度只在 YouTube 判定為兩欄時才扣除'
   assert.ok(twoColumnRule, '應有 [is-two-columns_] 覆寫規則');
   assert.match(twoColumnRule[0], /calc\(100vw - 472px\)/);
   // 基礎規則（單欄）不得扣掉側欄，否則窄視窗下播放器會縮得比需要更小
-  const baseRule = css.match(/ytd-watch-flexy,\s*\n\s*ytd-watch-flexy\[flexy\] \{[\s\S]*?\}/);
+  const baseRule = css.match(/ytd-watch-flexy:not\(\[full-bleed-player\]\),[\s\S]*?\{[\s\S]*?\}/);
   assert.ok(baseRule, '應有基礎規則');
   assert.match(baseRule[0], /calc\(100vw - 48px\)/);
 });
@@ -206,19 +206,35 @@ test('yarClampWindowSize: 夾擠到合法範圍，非數字回傳 null', () => {
   assert.deepStrictEqual(plain(worker.yarClampWindowSize(99999, 99999)), { width: 7680, height: 4320 });
 });
 
-test('yarBuildEmbedUrl: 只接受 11 碼合法 videoId', () => {
+test('yarBuildPopupUrl: 走 watch 頁 + hash 標記，不用會被拒絕的 /embed/', () => {
   assert.strictEqual(
-    worker.yarBuildEmbedUrl('aqz-KE-bpKQ', 24),
-    'https://www.youtube.com/embed/aqz-KE-bpKQ?autoplay=1&start=24'
+    worker.yarBuildPopupUrl('aqz-KE-bpKQ', 24),
+    'https://www.youtube.com/watch?v=aqz-KE-bpKQ&t=24s#yar-popup'
   );
-  assert.strictEqual(worker.yarBuildEmbedUrl('aqz-KE-bpKQ', -5), 'https://www.youtube.com/embed/aqz-KE-bpKQ?autoplay=1&start=0');
-  assert.strictEqual(worker.yarBuildEmbedUrl('aqz-KE-bpKQ', 'abc'), 'https://www.youtube.com/embed/aqz-KE-bpKQ?autoplay=1&start=0');
+  assert.doesNotMatch(worker.yarBuildPopupUrl('aqz-KE-bpKQ', 24), /\/embed\//, '頂層開 /embed/ 會回錯誤 153');
+  assert.match(worker.yarBuildPopupUrl('aqz-KE-bpKQ', -5), /&t=0s#/);
+  assert.match(worker.yarBuildPopupUrl('aqz-KE-bpKQ', 'abc'), /&t=0s#/);
 });
 
-test('yarBuildEmbedUrl: 拒絕會污染 URL 的 videoId', () => {
+test('yarBuildPopupUrl: 拒絕會污染 URL 的 videoId', () => {
   ['', 'short', 'aqz-KE-bpKQ&x=1', '../../evil', 'javascript:alert(1)', null, 42, 'a'.repeat(50)].forEach((bad) => {
-    assert.strictEqual(worker.yarBuildEmbedUrl(bad, 0), null, `應拒絕: ${String(bad)}`);
+    assert.strictEqual(worker.yarBuildPopupUrl(bad, 0), null, `應拒絕: ${String(bad)}`);
   });
+});
+
+test('yarBuildPopupPlayerCss: 收起頁首與推薦欄，播放器撐滿視窗', () => {
+  const css = cssOnly(sandbox.yarBuildPopupPlayerCss());
+  ['#masthead-container', '#secondary', 'ytd-watch-metadata'].forEach((sel) => {
+    assert.ok(css.includes(sel), `應收起 ${sel}`);
+  });
+  assert.match(css, /width: 100vw !important/);
+  assert.match(css, /height: 100vh !important/);
+  // 全部規則都必須綁在 popup 標記上，不能外洩到一般 watch 頁
+  css.split('\n').map((l) => l.trim()).filter((l) => /^[#.:a-z]/.test(l) && l.endsWith(',') || l.endsWith('{'))
+    .filter((l) => l !== '{' && !l.startsWith('}'))
+    .forEach((line) => {
+      assert.match(line, /:root\[yar-popup\]/, `未綁定 popup 標記: ${line}`);
+    });
 });
 
 test('yarBuildPlayerCss: YouTube 原生劇院/滿版模式不套用兩欄扣除', () => {
@@ -237,7 +253,15 @@ test('yarBuildPlayerCss: YouTube 原生劇院/滿版模式不套用兩欄扣除'
     });
 });
 
-test('yarBuildPlayerCss: 滿版容器需被撐開，避免高度塌陷', () => {
-  const css = sandbox.yarBuildPlayerCss(settingsFor({}), 'hd1080');
-  assert.match(css, /#player-full-bleed-container \{[^}]*height: var\(--yar-player-h\)/);
+test('yarBuildPlayerCss: 原生劇院/滿版模式下每一條選擇器都不生效', () => {
+  // YouTube 原生滿版模式本來就是滿版貼合，我們一旦介入就會把 --ytd-watch-flexy-player-width
+  // 一起改掉，而 YouTube 拿同一個變數去算 #primary 寬度，導致 primary+secondary 溢出視窗。
+  const css = cssOnly(sandbox.yarBuildPlayerCss(settingsFor({}), 'hd1080'));
+  const selectors = css
+    .split('{')[0] === css ? [] : css.split('\n').map((l) => l.trim())
+      .filter((l) => l.startsWith('ytd-watch-flexy'));
+  assert.ok(selectors.length > 0, '應該有選擇器可檢查');
+  selectors.forEach((line) => {
+    assert.match(line, /:not\(\[full-bleed-player\]\)/, `未排除原生滿版模式: ${line}`);
+  });
 });

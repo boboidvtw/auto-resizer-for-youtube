@@ -83,6 +83,15 @@ const YAR_CHANNEL = {
 
 const YAR_VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 
+/**
+ * 彈出式播放器視窗的識別標記（放在 URL hash）。
+ * 不用 youtube.com/embed/：那個路徑是設計給 iframe 的，直接當頂層視窗開會回「錯誤 153
+ * 影片播放器設定錯誤」，且與影片本身是否允許嵌入無關。改為開一般 watch 頁再由
+ * content script 收成純播放器，不依賴 YouTube 的嵌入政策。
+ */
+const YAR_POPUP_MARKER = 'yar-popup';
+const YAR_POPUP_ATTRIBUTE = 'yar-popup';
+
 function yarLog(...args) {
   if (YAR_DEBUG) console.log('[YouTube Auto Resizer]', ...args);
 }

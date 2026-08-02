@@ -46,9 +46,19 @@
     if (el) el.textContent = '';
   }
 
+  /** 由 background.js 開啟的彈出式播放器視窗（以 URL hash 標記） */
+  function isPopupPlayerWindow() {
+    return window.location.hash.slice(1) === YAR_POPUP_MARKER;
+  }
+
   function applyPlayerLayout() {
     if (!isWatchPage()) {
       clearStyle();
+      return;
+    }
+    if (isPopupPlayerWindow()) {
+      document.documentElement.setAttribute(YAR_POPUP_ATTRIBUTE, '');
+      getStyleElement().textContent = yarBuildPopupPlayerCss();
       return;
     }
     const css = yarBuildPlayerCss(settings, lastQuality || 'hd1080');
@@ -240,6 +250,8 @@
 
   /** @returns {boolean} 是否已完成注入（含先前已存在的情況） */
   function injectPopupButton() {
+    // 彈出視窗裡再放一顆「彈出」按鈕沒有意義，也避免使用者無限開視窗
+    if (isPopupPlayerWindow()) return true;
     if (document.getElementById(POPUP_BUTTON_ID)) return true;
     const rightControls = document.querySelector('.ytp-right-controls');
     if (!rightControls) return false;

@@ -20,11 +20,15 @@ function yarClampWindowSize(width, height) {
   };
 }
 
-/** 只接受合法的 11 碼 videoId 與非負秒數，避免拼出非預期的 URL */
-function yarBuildEmbedUrl(videoId, startTime) {
+/**
+ * 只接受合法的 11 碼 videoId 與非負秒數，避免拼出非預期的 URL。
+ * 走一般 watch 頁 + hash 標記，由 content script 收成純播放器；
+ * 不用 /embed/（頂層開啟一律回錯誤 153，見 config.js 的 YAR_POPUP_MARKER 說明）。
+ */
+function yarBuildPopupUrl(videoId, startTime) {
   if (typeof videoId !== 'string' || !YAR_VIDEO_ID_PATTERN.test(videoId)) return null;
   const start = Number.isFinite(startTime) && startTime > 0 ? Math.floor(startTime) : 0;
-  return `https://www.youtube.com/embed/${videoId}?autoplay=1&start=${start}`;
+  return `https://www.youtube.com/watch?v=${videoId}&t=${start}s#${YAR_POPUP_MARKER}`;
 }
 
 function yarHandleResizeWindow(message, sender) {
@@ -36,7 +40,7 @@ function yarHandleResizeWindow(message, sender) {
 }
 
 function yarHandleOpenPopupPlayer(message) {
-  const url = yarBuildEmbedUrl(message.videoId, message.startTime);
+  const url = yarBuildPopupUrl(message.videoId, message.startTime);
   if (!url) {
     yarWarn('無效的 videoId，已取消開啟彈出式播放器');
     return;
