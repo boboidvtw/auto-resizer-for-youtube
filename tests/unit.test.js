@@ -21,7 +21,8 @@ const EXPORTED = [
   'YAR_QUALITY_WIDTH',
   'YAR_QUALITY_ALIAS',
   'YAR_RESIZE_MODES',
-  'YAR_STORAGE_KEY'
+  'YAR_STORAGE_KEY',
+  'YAR_WINDOW_RESIZE_COOLDOWN_MS'
 ];
 
 function loadSandbox() {
@@ -264,4 +265,29 @@ test('yarBuildPlayerCss: 原生劇院/滿版模式下每一條選擇器都不生
   selectors.forEach((line) => {
     assert.match(line, /:not\(\[full-bleed-player\]\)/, `未排除原生滿版模式: ${line}`);
   });
+});
+
+// ------------------------------------------------ 視窗尺寸（依畫質）
+
+test('yarFitWindowSize: 寬與高都必須夾到螢幕可用範圍', () => {
+  // 1920 寬的播放器 + 標題列，在 1680x1050 的螢幕上：只夾寬度會長出 1080 高而超出螢幕
+  const popup = sandbox.yarFitWindowSize(1920, 0, 28, 1680, 1050);
+  assert.ok(popup.width <= 1680, `寬度需夾到螢幕: ${popup.width}`);
+  assert.ok(popup.height <= 1050, `高度需夾到螢幕: ${popup.height}`);
+
+  // 等比縮放：維持 16:9 加上標題列的比例
+  const ratio = (popup.width * 9) / 16 + 28 * (popup.width / 1920);
+  assert.ok(Math.abs(popup.height - ratio) < 2, `應等比縮放，實得 ${popup.height} 期望約 ${Math.round(ratio)}`);
+});
+
+test('yarFitWindowSize: 螢幕夠大時不放大，維持原生尺寸', () => {
+  const size = sandbox.yarFitWindowSize(1280, 0, 28, 3840, 2160);
+  assert.strictEqual(size.width, 1280);
+  assert.strictEqual(size.height, Math.round((1280 * 9) / 16) + 28);
+});
+
+test('yarFitWindowSize: 一般視窗要把側欄寬度算進去', () => {
+  const extraWidth = sandbox.YAR_LAYOUT.SIDEBAR_WIDTH + sandbox.YAR_LAYOUT.COLUMN_GAP;
+  const size = sandbox.yarFitWindowSize(1280, extraWidth, 0, 5000, 5000);
+  assert.strictEqual(size.width, 1280 + extraWidth);
 });

@@ -26,8 +26,34 @@ const YAR_LAYOUT = {
   PAGE_PADDING: 32,        // #columns 左右 padding 合計
   SCROLLBAR_RESERVE: 16,   // 100vw 含捲軸，需扣除避免橫向溢出
   MIN_PLAYER_WIDTH: 426,   // 播放器寬度下限
-  WINDOW_CHROME_HEIGHT: 120 // 瀏覽器標題列 + 網址列 + YouTube 資訊區估值
+  WINDOW_CHROME_HEIGHT: 120, // 一般視窗：標題列 + 網址列 + YouTube 資訊區估值
+  POPUP_CHROME_HEIGHT: 28    // 彈出視窗：只有標題列
 };
+
+/** 畫質抖動（ABR 自動切換）時避免視窗連續跳動的冷卻時間 */
+const YAR_WINDOW_RESIZE_COOLDOWN_MS = 1500;
+
+/**
+ * 依畫質算出視窗尺寸，並等比縮到螢幕可用範圍內。
+ * 只夾寬度不夾高度會讓視窗長過螢幕（1920 寬 -> 1080 高 > 多數筆電的可用高度）。
+ * @param {number} playerWidth 畫質對應的播放器原生寬度
+ * @param {number} extraWidth  視窗比播放器多出的寬度（側欄等）
+ * @param {number} extraHeight 視窗比播放器多出的高度（標題列等）
+ * @param {number} availWidth  螢幕可用寬
+ * @param {number} availHeight 螢幕可用高
+ * @returns {{width: number, height: number}}
+ */
+function yarFitWindowSize(playerWidth, extraWidth, extraHeight, availWidth, availHeight) {
+  const wanted = {
+    width: playerWidth + extraWidth,
+    height: Math.round((playerWidth * 9) / 16) + extraHeight
+  };
+  const scale = Math.min(1, availWidth / wanted.width, availHeight / wanted.height);
+  return {
+    width: Math.round(wanted.width * scale),
+    height: Math.round(wanted.height * scale)
+  };
+}
 
 /** 畫質代碼 → 原生像素寬度（高度一律由 16:9 推導） */
 const YAR_QUALITY_WIDTH = {

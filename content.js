@@ -20,6 +20,7 @@
   let lastVideoId = null;
   let qualityLockedFor = null;
   let resizedWindowFor = null;
+  let lastWindowResizeAt = 0;
   let buttonRetries = 0;
   let buttonTimer = null;
 
@@ -134,30 +135,51 @@
 
   // ------------------------------------------------------- 瀏覽器視窗同步
 
+  /**
+   * 依目前畫質算出視窗該有的尺寸。
+   * 這裡用 screen.avail* 是正確的：目標是實體螢幕上的「瀏覽器視窗」，
+   * 而非頁面版面（版面用的是 CSS 的 100vw/100vh）。
+   */
+  function windowSizeForQuality(isPopup) {
+    const playerWidth = YAR_QUALITY_WIDTH[lastQuality] || YAR_QUALITY_WIDTH.hd1080;
+    const extraWidth = isPopup
+      ? 0
+      : YAR_LAYOUT.SIDEBAR_WIDTH + YAR_LAYOUT.COLUMN_GAP + YAR_LAYOUT.PAGE_PADDING + YAR_LAYOUT.SCROLLBAR_RESERVE;
+    const extraHeight = isPopup
+      ? YAR_LAYOUT.POPUP_CHROME_HEIGHT
+      : YAR_LAYOUT.MASTHEAD_HEIGHT + YAR_LAYOUT.WINDOW_CHROME_HEIGHT;
+
+    const screenInfo = window.screen || {};
+    return yarFitWindowSize(
+      playerWidth,
+      extraWidth,
+      extraHeight,
+      screenInfo.availWidth || playerWidth + extraWidth,
+      screenInfo.availHeight || Math.round((playerWidth * 9) / 16) + extraHeight
+    );
+  }
+
+  /**
+   * 彈出視窗一律跟著畫質調整尺寸（那正是它的用途）；
+   * 一般視窗只在使用者開啟「同步調整瀏覽器視窗尺寸」時才動。
+   */
   function syncBrowserWindow() {
-    if (!settings.resizeMainWindow || !settings.enabled || !isWatchPage()) return;
+    if (!isWatchPage()) return;
+    const isPopup = isPopupPlayerWindow();
+    if (!isPopup && (!settings.resizeMainWindow || !settings.enabled)) return;
     if (resizedWindowFor === lastQuality) return;
     if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) return;
 
-    const playerWidth = YAR_QUALITY_WIDTH[lastQuality] || YAR_QUALITY_WIDTH.hd1080;
-    const chromeWidth =
-      YAR_LAYOUT.SIDEBAR_WIDTH + YAR_LAYOUT.COLUMN_GAP + YAR_LAYOUT.PAGE_PADDING + YAR_LAYOUT.SCROLLBAR_RESERVE;
-    // 這裡用 screen.avail* 是正確的：目標是實體螢幕上的「瀏覽器視窗」尺寸
-    const availWidth = (window.screen && window.screen.availWidth) || playerWidth;
-    const availHeight = (window.screen && window.screen.availHeight) || Math.round((playerWidth * 9) / 16);
+    const now = Date.now();
+    if (now - lastWindowResizeAt < YAR_WINDOW_RESIZE_COOLDOWN_MS) return;
 
     resizedWindowFor = lastQuality;
+    lastWindowResizeAt = now;
     chrome.runtime.sendMessage(
-      {
-        action: YAR_MSG.RESIZE_WINDOW,
-        width: Math.min(playerWidth + chromeWidth, availWidth),
-        height: Math.min(
-          Math.round((playerWidth * 9) / 16) + YAR_LAYOUT.MASTHEAD_HEIGHT + YAR_LAYOUT.WINDOW_CHROME_HEIGHT,
-          availHeight
-        )
-      },
+      Object.assign({ action: YAR_MSG.RESIZE_WINDOW }, windowSizeForQuality(isPopup)),
       () => void chrome.runtime.lastError
     );
+    yarLog('要求調整視窗尺寸', lastQuality, windowSizeForQuality(isPopup));
   }
 
   // ------------------------------------------------ 主世界畫質事件接收
@@ -209,17 +231,17 @@
     const videoId = new URLSearchParams(window.location.search).get('v');
     if (!videoId || typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) return;
 
-    const playerWidth = YAR_QUALITY_WIDTH[lastQuality] || YAR_QUALITY_WIDTH.hd720;
     if (video) video.pause();
 
     chrome.runtime.sendMessage(
-      {
-        action: YAR_MSG.OPEN_POPUP_PLAYER,
-        videoId,
-        startTime: video ? Math.floor(video.currentTime) : 0,
-        width: Math.min(playerWidth, (window.screen && window.screen.availWidth) || playerWidth),
-        height: Math.round((playerWidth * 9) / 16)
-      },
+      Object.assign(
+        {
+          action: YAR_MSG.OPEN_POPUP_PLAYER,
+          videoId,
+          startTime: video ? Math.floor(video.currentTime) : 0
+        },
+        windowSizeForQuality(true)
+      ),
       () => void chrome.runtime.lastError
     );
   }
