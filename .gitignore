@@ -1,6 +1,10 @@
 .DS_Store
 *.log
+
+# 截圖等暫存 PNG 不進版控，但擴充功能圖示必須留下
 *.png
+!icons/*.png
+
 node_modules/
 .vscode/
 .idea/

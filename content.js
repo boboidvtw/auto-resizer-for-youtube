@@ -1,383 +1,269 @@
-(function() {
-  console.log('[YouTube Auto Resizer] Content script loaded.');
+/**
+ * content.js — 隔離世界主控：設定、樣式套用、主世界腳本注入、控制列按鈕
+ * Isolated-world orchestrator.
+ *
+ * Updated: 2026-08-02
+ * 依賴 (depends on): src/config.js, src/layout.js（由 manifest 依序注入）
+ */
 
-  const DEFAULT_SETTINGS = {
-    enabledInPage: true,
-    enabledPopup: true,
-    resizeMainWindowInPage: true,
-    maxScreenSafeguard: true,
-    aspectRatioOffsetHeight: 80,
-    aspectRatioOffsetWidth: 16,
-    qualityMap: {
-      'highres': { width: 7680, height: 4320 },
-      'hd2160':  { width: 3840, height: 2160 },
-      'hd1440':  { width: 2560, height: 1440 },
-      'hd1080':  { width: 1920, height: 1080 },
-      'hd720':   { width: 1280, height: 720 },
-      'large':    { width: 854,  height: 480 },
-      'medium':   { width: 640,  height: 360 },
-      'small':    { width: 426,  height: 240 },
-      'tiny':     { width: 256,  height: 144 }
-    }
-  };
+(function () {
+  'use strict';
 
-  let currentSettings = Object.assign({}, DEFAULT_SETTINGS);
-  let lastAppliedQuality = null;
-  let lastAppliedVideoW = 0;
-  let lastAppliedVideoH = 0;
+  const STYLE_ELEMENT_ID = 'yt-auto-resizer-dynamic-style';
+  const POPUP_BUTTON_ID = 'yt-resizer-popup-btn';
+  const MAIN_WORLD_SCRIPTS = ['injected.js', 'pageScript.js'];
+  const BUTTON_RETRY_INTERVAL_MS = 500;
+  const BUTTON_MAX_RETRIES = 20;
 
-  // Synchronously fetch and listen to storage
-  function updateSettings() {
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
-      chrome.storage.sync.get(['yt_auto_resizer_settings'], (result) => {
-        if (result && result.yt_auto_resizer_settings) {
-          currentSettings = Object.assign({}, DEFAULT_SETTINGS, result.yt_auto_resizer_settings);
-          if (lastAppliedQuality) {
-            applyInPagePlayerSize(lastAppliedQuality, lastAppliedVideoW, lastAppliedVideoH);
-          }
-        }
-      });
-    }
-    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
-      try {
-        chrome.runtime.sendMessage({ action: 'GET_SETTINGS' }, (settings) => {
-          if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.lastError) return;
-          if (settings) {
-            currentSettings = Object.assign({}, DEFAULT_SETTINGS, settings);
-            if (lastAppliedQuality) {
-              applyInPagePlayerSize(lastAppliedQuality, lastAppliedVideoW, lastAppliedVideoH);
-            }
-          }
-        });
-      } catch (e) {}
-    }
+  let settings = yarNormalizeSettings(null);
+  let lastQuality = null;
+  let lastVideoId = null;
+  let qualityLockedFor = null;
+  let resizedWindowFor = null;
+  let buttonRetries = 0;
+  let buttonTimer = null;
+
+  // ---------------------------------------------------------------- 頁面判斷
+
+  function isWatchPage() {
+    return window.location.pathname.startsWith('/watch') || !!document.querySelector('ytd-watch-flexy');
   }
-  updateSettings();
+
+  // ---------------------------------------------------------------- 樣式套用
+
+  function getStyleElement() {
+    let el = document.getElementById(STYLE_ELEMENT_ID);
+    if (!el) {
+      el = document.createElement('style');
+      el.id = STYLE_ELEMENT_ID;
+      (document.head || document.documentElement).appendChild(el);
+    }
+    return el;
+  }
+
+  function clearStyle() {
+    const el = document.getElementById(STYLE_ELEMENT_ID);
+    if (el) el.textContent = '';
+  }
+
+  function applyPlayerLayout() {
+    if (!isWatchPage()) {
+      clearStyle();
+      return;
+    }
+    const css = yarBuildPlayerCss(settings, lastQuality || 'hd1080');
+    getStyleElement().textContent = css;
+    yarLog('已套用版面', settings.resizeMode, lastQuality, css ? '' : '(已清空)');
+  }
+
+  // ---------------------------------------------------------------- 設定同步
+
+  function adoptSettings(next) {
+    settings = yarNormalizeSettings(next);
+    qualityLockedFor = null;   // 設定變更後允許重新鎖定畫質
+    resizedWindowFor = null;
+    applyPlayerLayout();
+    pushPreferredQuality();
+    requestMainWorldState();
+  }
+
+  yarLoadSettings().then(adoptSettings);
 
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
-    chrome.storage.onChanged.addListener((changes) => {
-      if (changes.yt_auto_resizer_settings) {
-        currentSettings = Object.assign({}, DEFAULT_SETTINGS, changes.yt_auto_resizer_settings.newValue);
-        if (lastAppliedQuality) {
-          applyInPagePlayerSize(lastAppliedQuality, lastAppliedVideoW, lastAppliedVideoH);
-        }
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== 'sync' || !changes[YAR_STORAGE_KEY]) return;
+      adoptSettings(changes[YAR_STORAGE_KEY].newValue);
+    });
+  }
+
+  // ------------------------------------------------------- 主世界腳本注入
+
+  /** 要求主世界重播目前畫質狀態（同一支影片只會主動廣播一次，晚註冊者需主動索取） */
+  function requestMainWorldState() {
+    document.dispatchEvent(new CustomEvent(YAR_CHANNEL.REQUEST_STATE));
+  }
+
+  function injectMainWorldScripts() {
+    if (typeof chrome === 'undefined' || !chrome.runtime || typeof chrome.runtime.getURL !== 'function') return;
+    MAIN_WORLD_SCRIPTS.forEach((file) => {
+      const flagId = `yt-auto-resizer-${file.replace('.js', '')}-flag`;
+      if (document.getElementById(flagId)) {
+        requestMainWorldState();
+        return;
+      }
+      try {
+        const script = document.createElement('script');
+        script.id = flagId;
+        script.src = chrome.runtime.getURL(file);
+        script.onload = requestMainWorldState;
+        (document.head || document.documentElement).appendChild(script);
+      } catch (err) {
+        yarWarn(`注入 ${file} 失敗:`, err.message);
       }
     });
   }
 
-  // Inject main world script with CSP safety check
-  function injectMainWorldScript() {
-    if (document.getElementById('yt-auto-resizer-injected-flag')) return;
-    if (typeof chrome !== 'undefined' && chrome.runtime && typeof chrome.runtime.getURL === 'function') {
-      try {
-        const s = document.createElement('script');
-        s.id = 'yt-auto-resizer-injected-flag';
-        s.src = chrome.runtime.getURL('injected.js');
-        s.onload = function() {
-          console.log('[YouTube Auto Resizer] Main world script attached.');
-        };
-        (document.head || document.documentElement).appendChild(s);
-      } catch (e) {}
-    }
-  }
-  injectMainWorldScript();
-  document.addEventListener('yt-navigate-finish', injectMainWorldScript);
-  document.addEventListener('DOMContentLoaded', injectMainWorldScript);
+  injectMainWorldScripts();
 
-  // Style element for Scenario C dynamic player sizing
-  let styleEl = document.getElementById('yt-auto-resizer-dynamic-style');
-  if (!styleEl) {
-    styleEl = document.createElement('style');
-    styleEl.id = 'yt-auto-resizer-dynamic-style';
-    (document.head || document.documentElement).appendChild(styleEl);
+  // ---------------------------------------------------------------- 畫質鎖定
+
+  function pushPreferredQuality() {
+    if (!settings.enabled || settings.preferredQuality === 'auto') return;
+    if (!isWatchPage() || !lastVideoId || qualityLockedFor === lastVideoId) return;
+    qualityLockedFor = lastVideoId;
+    window.postMessage(
+      {
+        type: YAR_CHANNEL.ACTION,
+        action: YAR_CHANNEL.SET_QUALITY,
+        payload: { quality: settings.preferredQuality }
+      },
+      window.location.origin
+    );
+    yarLog('要求鎖定畫質', settings.preferredQuality);
   }
 
-  function ensureStyleAttached() {
-    let el = document.getElementById('yt-auto-resizer-dynamic-style');
-    if (!el) {
-      el = document.createElement('style');
-      el.id = 'yt-auto-resizer-dynamic-style';
-      (document.head || document.documentElement).appendChild(el);
-    }
-    styleEl = el;
+  // ------------------------------------------------------- 瀏覽器視窗同步
+
+  function syncBrowserWindow() {
+    if (!settings.resizeMainWindow || !settings.enabled || !isWatchPage()) return;
+    if (resizedWindowFor === lastQuality) return;
+    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) return;
+
+    const playerWidth = YAR_QUALITY_WIDTH[lastQuality] || YAR_QUALITY_WIDTH.hd1080;
+    const chromeWidth =
+      YAR_LAYOUT.SIDEBAR_WIDTH + YAR_LAYOUT.COLUMN_GAP + YAR_LAYOUT.PAGE_PADDING + YAR_LAYOUT.SCROLLBAR_RESERVE;
+    // 這裡用 screen.avail* 是正確的：目標是實體螢幕上的「瀏覽器視窗」尺寸
+    const availWidth = (window.screen && window.screen.availWidth) || playerWidth;
+    const availHeight = (window.screen && window.screen.availHeight) || Math.round((playerWidth * 9) / 16);
+
+    resizedWindowFor = lastQuality;
+    chrome.runtime.sendMessage(
+      {
+        action: YAR_MSG.RESIZE_WINDOW,
+        width: Math.min(playerWidth + chromeWidth, availWidth),
+        height: Math.min(
+          Math.round((playerWidth * 9) / 16) + YAR_LAYOUT.MASTHEAD_HEIGHT + YAR_LAYOUT.WINDOW_CHROME_HEIGHT,
+          availHeight
+        )
+      },
+      () => void chrome.runtime.lastError
+    );
   }
 
-  // Scenario C: Apply In-page Player Size & Layout Adaptation
-  function applyInPagePlayerSize(quality, videoW, videoH) {
-    console.log('[YouTube Auto Resizer] applyInPagePlayerSize ENTERED with quality =', quality, videoW, videoH);
-    lastAppliedQuality = quality;
-    lastAppliedVideoW = videoW;
-    lastAppliedVideoH = videoH;
+  // ------------------------------------------------ 主世界畫質事件接收
 
-    const activeSettings = currentSettings || DEFAULT_SETTINGS;
-    if (!activeSettings.enabledInPage) {
-      console.log('[YouTube Auto Resizer] enabledInPage is FALSE, clearing style.');
-      if (styleEl) styleEl.textContent = '';
-      return;
-    }
-
-    const isWatchPage = window.location.pathname.startsWith('/watch') || !!document.querySelector('ytd-watch-flexy');
-    if (!isWatchPage) {
-      console.log('[YouTube Auto Resizer] Not on a watch page, clearing dynamic style.');
-      if (styleEl) styleEl.textContent = '';
-      return;
-    }
-
-    ensureStyleAttached();
-
-    const qMap = activeSettings.qualityMap || DEFAULT_SETTINGS.qualityMap;
-    let targetW = 0;
-    let targetH = 0;
-
-    if (qMap[quality]) {
-      targetW = qMap[quality].width;
-      targetH = qMap[quality].height;
-    } else if (videoW > 0 && videoH > 0) {
-      targetW = videoW;
-      targetH = videoH;
-    }
-
-    // Default fallback to 1280x720 only if unmapped/invalid
-    if (!targetW || !targetH) {
-      targetW = 1280;
-      targetH = 720;
-    }
-
-    // Force 16:9 aspect ratio matching
-    targetH = Math.round(targetW * 9 / 16);
-
-    // Apply Screen Safeguard based on physical screen available width
-    if (activeSettings.maxScreenSafeguard) {
-      const availWidth = (window.screen && window.screen.availWidth) ? window.screen.availWidth : 1920;
-      const availHeight = (window.screen && window.screen.availHeight) ? window.screen.availHeight : 1080;
-      
-      const maxPlayerW = Math.min(targetW, availWidth - 40);
-      const maxPlayerH = Math.min(targetH, availHeight - 80);
-
-      const scale = Math.min(maxPlayerW / targetW, maxPlayerH / targetH);
-      if (scale < 1) {
-        targetW = Math.round(targetW * scale);
-        targetH = Math.round(targetW * 9 / 16);
-      }
-    }
-
-    console.log(`[YouTube Auto Resizer] Applying Scenario C player size: ${targetW}x${targetH} (Quality: ${quality})`);
-
-    // Inject CSS rule overriding player container & inner HTML5 video stream dimensions - strictly scoped to ytd-watch-flexy
-    styleEl.textContent = `
-      /* YouTube polymer layout variables - scoped to watch page */
-      ytd-watch-flexy,
-      ytd-watch-flexy[flexy],
-      ytd-watch-flexy[is-two-columns_] {
-        --ytd-watch-flexy-player-width: ${targetW}px !important;
-        --ytd-watch-flexy-player-height: ${targetH}px !important;
-        --ytd-watch-flexy-min-player-height: ${targetH}px !important;
-        --ytd-watch-flexy-max-player-width-wide-screen: 9999px !important;
-        --yt-player-width: ${targetW}px !important;
-        --yt-player-height: ${targetH}px !important;
-      }
-
-      /* Container exact 16:9 sizing with high specificity - scoped to ytd-watch-flexy */
-      ytd-watch-flexy[flexy] #player-container-outer.ytd-watch-flexy,
-      ytd-watch-flexy[flexy] #player-container-inner.ytd-watch-flexy,
-      ytd-watch-flexy[flexy] #player-container.ytd-watch-flexy,
-      ytd-watch-flexy #player-container-outer,
-      ytd-watch-flexy #player-container-inner,
-      ytd-watch-flexy #player-container,
-      ytd-watch-flexy #player,
-      ytd-watch-flexy #ytd-player,
-      ytd-watch-flexy #movie_player:not(.ytp-fullscreen),
-      ytd-watch-flexy .html5-video-player:not(.ytp-fullscreen) {
-        width: ${targetW}px !important;
-        height: ${targetH}px !important;
-        min-width: 0 !important;
-        min-height: 0 !important;
-        max-width: none !important;
-        max-height: none !important;
-        padding-top: 0 !important;
-        transition: width 0.3s ease, height 0.3s ease !important;
-      }
-
-      /* Force HTML5 video stream to stretch to 100% of player container */
-      ytd-watch-flexy .html5-video-container,
-      ytd-watch-flexy .html5-main-video,
-      ytd-watch-flexy video.video-stream,
-      ytd-watch-flexy #movie_player video {
-        width: 100% !important;
-        height: 100% !important;
-        top: 0 !important;
-        left: 0 !important;
-        min-width: 0 !important;
-        min-height: 0 !important;
-        max-width: none !important;
-        max-height: none !important;
-        object-fit: contain !important;
-      }
-
-      /* Ensure player containers stay 100% visible across all YouTube Polymer modes */
-      ytd-watch-flexy #player,
-      ytd-watch-flexy[theater] #player,
-      ytd-watch-flexy[full-bleed-player] #player,
-      ytd-watch-flexy #player-container,
-      ytd-watch-flexy[theater] #player-container,
-      ytd-watch-flexy[full-bleed-player] #player-container,
-      ytd-watch-flexy #player-container-inner,
-      ytd-watch-flexy #player-container-outer,
-      ytd-watch-flexy #player-full-bleed-container,
-      ytd-watch-flexy #full-bleed-container,
-      ytd-watch-flexy #ytd-player,
-      ytd-watch-flexy #movie_player {
-        display: block !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-      }
-
-      /* YouTube Settings Popup Menu (.ytp-popup) fixes */
-      .ytp-popup,
-      .ytp-settings-menu {
-        z-index: 999999 !important;
-      }
-
-      /* Guide drawer left sidebar fix: solid background and high z-index stacking */
-      tp-yt-app-drawer#guide,
-      ytd-guide-renderer,
-      #guide-wrapper,
-      #guide-content {
-        background-color: var(--yt-spec-base-background, #0f0f0f) !important;
-        z-index: 99999 !important;
-      }
-
-      /* Page Layout Zero-Gap Auto-Adaptation & Left Alignment - strictly scoped under ytd-watch-flexy */
-      ytd-watch-flexy #columns.ytd-watch-flexy {
-        max-width: none !important;
-        width: 100% !important;
-        margin-left: 0 !important;
-        margin-right: 0 !important;
-        display: flex !important;
-        flex-direction: row !important;
-        justify-content: flex-start !important;
-        align-items: flex-start !important;
-        gap: 20px !important;
-        padding: 0 16px !important;
-      }
-      ytd-watch-flexy #primary.ytd-watch-flexy,
-      ytd-watch-flexy #primary-inner {
-        width: ${targetW}px !important;
-        max-width: ${targetW}px !important;
-        min-width: 0 !important;
-        flex: none !important;
-        margin-left: 0 !important;
-        padding-left: 0 !important;
-        padding-right: 0 !important;
-      }
-      ytd-watch-flexy #secondary.ytd-watch-flexy {
-        width: 400px !important;
-        min-width: 300px !important;
-        max-width: 420px !important;
-        flex: none !important;
-        margin-right: 0 !important;
-        margin-top: 0 !important;
-        padding-left: 0 !important;
-        padding-top: 0 !important;
-        top: 0 !important;
-        position: relative !important;
-      }
-    `;
-
-    // Dispatch window resize event so YouTube's Web Component re-evaluates layout bounds
-    window.dispatchEvent(new Event('resize'));
-
-    // Optionally sync Chrome main browser window size if enabled
-    if (activeSettings.resizeMainWindowInPage && typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
-      const totalWidth = targetW + 420;
-      const totalHeight = targetH + 160;
-      try {
-        chrome.runtime.sendMessage({
-          action: 'RESIZE_WINDOW',
-          width: totalWidth,
-          height: totalHeight
-        });
-      } catch (e) {}
-    }
-  }
-
-  // Expose applyInPagePlayerSize on window for direct access
-  window.YT_AUTO_RESIZER_APPLY = applyInPagePlayerSize;
-
-  // Listen to main world quality change event on both document and window
   function handleQualityChange(event) {
-    const { quality, videoWidth, videoHeight } = event.detail || {};
-    console.log('[YouTube Auto Resizer] Quality change detected in content.js:', quality, videoWidth, videoHeight);
-    if (quality) {
-      applyInPagePlayerSize(quality, videoWidth, videoHeight);
+    const detail = event.detail || {};
+    if (!detail.quality) return;
+
+    if (detail.videoId && detail.videoId !== lastVideoId) {
+      lastVideoId = detail.videoId;
+      qualityLockedFor = null;
+      resizedWindowFor = null;
     }
+    lastQuality = detail.quality;
+
+    applyPlayerLayout();
+    pushPreferredQuality();
+    syncBrowserWindow();
   }
 
-  document.addEventListener('YT_AUTO_RESIZER_QUALITY_CHANGED', handleQualityChange);
-  window.addEventListener('YT_AUTO_RESIZER_QUALITY_CHANGED', handleQualityChange);
+  document.addEventListener(YAR_CHANNEL.QUALITY_CHANGED, handleQualityChange);
+
+  // ---------------------------------------------------------------- SPA 導航
 
   function handlePageNavigation() {
-    const isWatchPage = window.location.pathname.startsWith('/watch') || !!document.querySelector('ytd-watch-flexy');
-    if (!isWatchPage && styleEl) {
-      styleEl.textContent = '';
-      lastAppliedQuality = null;
+    injectMainWorldScripts();
+    if (!isWatchPage()) {
+      clearStyle();
+      lastQuality = null;
+      lastVideoId = null;
+      return;
     }
+    applyPlayerLayout();
+    scheduleButtonInjection();
+    requestMainWorldState();
   }
 
   document.addEventListener('yt-navigate-finish', handlePageNavigation);
   document.addEventListener('yt-page-data-updated', handlePageNavigation);
   window.addEventListener('popstate', handlePageNavigation);
 
-  // Inject Pop-up Player Button in YouTube Control Bar with TrustedTypes safe DOM elements
-  function injectPopupButton() {
-    const rightControls = document.querySelector('.ytp-right-controls');
-    if (!rightControls || document.getElementById('yt-resizer-popup-btn')) return;
+  // ------------------------------------------------- 控制列彈出播放器按鈕
 
-    try {
-      const btn = document.createElement('button');
-      btn.id = 'yt-resizer-popup-btn';
-      btn.className = 'ytp-button';
-      btn.title = '彈出式播放器 (Pop-up Player)';
+  function openPopupPlayer(event) {
+    event.preventDefault();
+    event.stopPropagation();
 
-      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      svg.setAttribute('width', '100%');
-      svg.setAttribute('height', '100%');
-      svg.setAttribute('viewBox', '0 0 36 36');
+    const video = document.querySelector('video');
+    const videoId = new URLSearchParams(window.location.search).get('v');
+    if (!videoId || typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) return;
 
-      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('fill', '#fff');
-      path.setAttribute('d', 'M19,11 L25,11 L25,17 L23,17 L23,14.41 L17.41,20 L16,18.59 L21.59,13 L19,13 L19,11 Z M11,13 L15,13 L15,15 L13,15 L13,23 L21,23 L21,21 L23,21 L23,25 L11,25 L11,13 Z');
+    const playerWidth = YAR_QUALITY_WIDTH[lastQuality] || YAR_QUALITY_WIDTH.hd720;
+    if (video) video.pause();
 
-      svg.appendChild(path);
-      btn.appendChild(svg);
-
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const video = document.querySelector('video');
-        const urlParams = new URLSearchParams(window.location.search);
-        const videoId = urlParams.get('v');
-        const currentTime = video ? Math.floor(video.currentTime) : 0;
-        
-        const moviePlayer = document.getElementById('movie_player');
-        const quality = (moviePlayer && typeof moviePlayer.getPlaybackQuality === 'function') ? moviePlayer.getPlaybackQuality() : 'hd1080';
-
-        if (videoId && typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
-          if (video) video.pause();
-          chrome.runtime.sendMessage({
-            action: 'OPEN_POPUP_PLAYER',
-            videoId: videoId,
-            quality: quality,
-            startTime: currentTime
-          });
-        }
-      });
-
-      rightControls.insertBefore(btn, rightControls.firstChild);
-    } catch (e) {}
+    chrome.runtime.sendMessage(
+      {
+        action: YAR_MSG.OPEN_POPUP_PLAYER,
+        videoId,
+        startTime: video ? Math.floor(video.currentTime) : 0,
+        width: Math.min(playerWidth, (window.screen && window.screen.availWidth) || playerWidth),
+        height: Math.round((playerWidth * 9) / 16)
+      },
+      () => void chrome.runtime.lastError
+    );
   }
 
-  setInterval(injectPopupButton, 1500);
+  function buildPopupButton() {
+    const button = document.createElement('button');
+    button.id = POPUP_BUTTON_ID;
+    button.className = 'ytp-button';
+    button.title = '彈出式播放器 (Pop-up Player)';
 
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '100%');
+    svg.setAttribute('height', '100%');
+    svg.setAttribute('viewBox', '0 0 36 36');
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('fill', '#fff');
+    path.setAttribute(
+      'd',
+      'M19,11 L25,11 L25,17 L23,17 L23,14.41 L17.41,20 L16,18.59 L21.59,13 L19,13 L19,11 Z M11,13 L15,13 L15,15 L13,15 L13,23 L21,23 L21,21 L23,21 L23,25 L11,25 L11,13 Z'
+    );
+
+    svg.appendChild(path);
+    button.appendChild(svg);
+    button.addEventListener('click', openPopupPlayer);
+    return button;
+  }
+
+  /** @returns {boolean} 是否已完成注入（含先前已存在的情況） */
+  function injectPopupButton() {
+    if (document.getElementById(POPUP_BUTTON_ID)) return true;
+    const rightControls = document.querySelector('.ytp-right-controls');
+    if (!rightControls) return false;
+    try {
+      rightControls.insertBefore(buildPopupButton(), rightControls.firstChild);
+      return true;
+    } catch (err) {
+      yarWarn('注入彈出播放器按鈕失敗:', err.message);
+      return true; // 失敗就不再重試，避免無限迴圈
+    }
+  }
+
+  /** 有界重試：找到控制列即停，不做永久輪詢 */
+  function scheduleButtonInjection() {
+    if (buttonTimer) clearTimeout(buttonTimer);
+    buttonRetries = 0;
+    const attempt = () => {
+      buttonTimer = null;
+      if (injectPopupButton() || !isWatchPage()) return;
+      if (++buttonRetries > BUTTON_MAX_RETRIES) return;
+      buttonTimer = setTimeout(attempt, BUTTON_RETRY_INTERVAL_MS);
+    };
+    attempt();
+  }
+
+  scheduleButtonInjection();
 })();

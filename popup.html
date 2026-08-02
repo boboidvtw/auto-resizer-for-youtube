@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>YouTube Auto Resizer</title>
   <link rel="stylesheet" href="popup.css">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="card">
@@ -32,13 +31,14 @@
       <section class="section">
         <label class="section-label">預設優先畫質</label>
         <select id="quality-select" class="select-input">
+          <option value="auto" selected>Auto (交給 YouTube 自動判斷)</option>
           <option value="2160p">4K (2160p)</option>
           <option value="1440p">2K (1440p)</option>
-          <option value="1080p" selected>Full HD (1080p)</option>
+          <option value="1080p">Full HD (1080p)</option>
           <option value="720p">HD (720p)</option>
           <option value="480p">SD (480p)</option>
-          <option value="auto">Auto (自動)</option>
         </select>
+        <p class="section-hint">選定畫質後，每支新影片會自動鎖定到該畫質；若該影片沒有此畫質，則取可用的最高畫質。</p>
       </section>
 
       <!-- Resize Mode -->
@@ -49,21 +49,21 @@
             <input type="radio" name="resizeMode" value="autoByQuality" checked>
             <div class="mode-box">
               <span class="mode-title">⚡ 依畫質自動匹配尺寸</span>
-              <span class="mode-desc">4K/2K 滿版視窗、1080p 劇院、720p 預設</span>
+              <span class="mode-desc">以影片原生解析度為上限，再收斂到視窗可容納的大小</span>
             </div>
           </label>
           <label class="mode-card">
             <input type="radio" name="resizeMode" value="fitWindow">
             <div class="mode-box">
               <span class="mode-title">強制視窗貼合 (Fit)</span>
-              <span class="mode-desc">所有畫質皆滿版貼合</span>
+              <span class="mode-desc">不論畫質一律撐滿視窗可用空間</span>
             </div>
           </label>
           <label class="mode-card">
             <input type="radio" name="resizeMode" value="theater">
             <div class="mode-box">
               <span class="mode-title">強制劇院模式</span>
-              <span class="mode-desc">標準劇院寬螢幕</span>
+              <span class="mode-desc">播放器滿寬，推薦影片移到下方</span>
             </div>
           </label>
           <label class="mode-card">
@@ -82,6 +82,10 @@
           <input type="checkbox" id="removeSideGaps-toggle" checked>
           <span>自動消除播放器兩側留白區</span>
         </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="resizeMainWindow-toggle">
+          <span>同步調整瀏覽器視窗尺寸</span>
+        </label>
       </section>
     </main>
 
@@ -97,6 +101,7 @@
     </footer>
   </div>
 
+  <script src="src/config.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

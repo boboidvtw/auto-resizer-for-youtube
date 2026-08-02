@@ -1,13 +1,23 @@
-(function() {
+/**
+ * pageScript.js — 主世界（MAIN world）畫質控制器
+ * Applies the user's preferred playback quality through YouTube's native player API.
+ *
+ * Updated: 2026-08-02
+ * v2.0 時本檔從未被任何程式載入（死碼），README 宣傳的「畫質鎖定」因此並不存在。
+ * 現由 content.js 一併注入，並以 postMessage 接收指令。
+ * 職責單一：只設定畫質，不偵測、不改版面。
+ */
+
+(function () {
   'use strict';
 
-  console.log('[YouTube Auto Resizer] PageScript loaded.');
+  const ACTION_TYPE = 'YT_AUTO_RESIZER_ACTION';
+  const SET_QUALITY = 'SET_QUALITY';
+  const APPLY_RETRY_MS = 500;
+  const APPLY_MAX_RETRIES = 10;
 
-  function getPlayer() {
-    return document.getElementById('movie_player') || document.querySelector('.html5-video-player');
-  }
-
-  const QUALITY_MAP = {
+  // 與 src/config.js 的 YAR_QUALITY_ALIAS 對應；主世界讀不到隔離世界的常數，故此處重複一份。
+  const QUALITY_ALIAS = {
     '2160p': 'hd2160',
     '1440p': 'hd1440',
     '1080p': 'hd1080',
@@ -15,66 +25,53 @@
     '480p': 'large',
     '360p': 'medium',
     '240p': 'small',
-    '144p': 'tiny',
-    'auto': 'auto'
+    '144p': 'tiny'
   };
 
-  function applyQuality(targetQuality) {
-    const player = getPlayer();
-    if (!player) return false;
+  function getPlayer() {
+    return document.getElementById('movie_player') || document.querySelector('.html5-video-player');
+  }
 
-    const requested = QUALITY_MAP[targetQuality] || targetQuality;
+  /**
+   * @returns {boolean} 是否已完成設定（false 代表播放器尚未就緒，值得重試）
+   */
+  function applyQuality(requestedLabel) {
+    const requested = QUALITY_ALIAS[requestedLabel];
+    if (!requested) return true; // 未知或 auto：不干預
+
+    const player = getPlayer();
+    if (!player || typeof player.getAvailableQualityLevels !== 'function') return false;
 
     try {
-      if (typeof player.getAvailableQualityLevels === 'function') {
-        const available = player.getAvailableQualityLevels();
+      const available = player.getAvailableQualityLevels();
+      if (!available || available.length === 0) return false;
 
-        let selectedQuality = requested;
-        if (available && available.length > 0 && !available.includes(requested) && requested !== 'auto') {
-          selectedQuality = available[0];
-        }
+      // available 由高到低排序；沒有指定畫質時退而求其次選最接近的最高畫質
+      const selected = available.includes(requested) ? requested : available[0];
 
-        if (typeof player.setPlaybackQualityRange === 'function') {
-          player.setPlaybackQualityRange(selectedQuality, selectedQuality);
-        }
-        if (typeof player.setPlaybackQuality === 'function') {
-          player.setPlaybackQuality(selectedQuality);
-        }
-        notifyCurrentQuality();
-        return true;
+      if (typeof player.setPlaybackQualityRange === 'function') {
+        player.setPlaybackQualityRange(selected, selected);
       }
+      if (typeof player.setPlaybackQuality === 'function') {
+        player.setPlaybackQuality(selected);
+      }
+      return true;
     } catch (err) {
-      console.warn('[YouTube Auto Resizer] Quality error:', err);
-    }
-    return false;
-  }
-
-  function notifyCurrentQuality() {
-    const player = getPlayer();
-    if (player && typeof player.getPlaybackQuality === 'function') {
-      const q = player.getPlaybackQuality();
-      window.postMessage({
-        type: 'YT_AUTO_RESIZER_QUALITY_DETECTED',
-        quality: q
-      }, '*');
+      console.warn('[YouTube Auto Resizer] 設定畫質失敗:', err.message);
+      return true; // 失敗不重試，避免與使用者手動選擇互相拉扯
     }
   }
 
-  // Attach quality change listener
-  setInterval(function() {
-    notifyCurrentQuality();
-  }, 1500);
+  function applyQualityWithRetry(label, attempt = 0) {
+    if (applyQuality(label) || attempt >= APPLY_MAX_RETRIES) return;
+    setTimeout(() => applyQualityWithRetry(label, attempt + 1), APPLY_RETRY_MS);
+  }
 
-  window.addEventListener('message', function(event) {
-    if (event.source !== window || !event.data || event.data.type !== 'YT_AUTO_RESIZER_ACTION') {
-      return;
-    }
-
-    const { action, payload } = event.data;
-
-    if (action === 'SET_QUALITY') {
-      applyQuality(payload.quality);
-    }
+  window.addEventListener('message', (event) => {
+    if (event.source !== window || event.origin !== window.location.origin) return;
+    const data = event.data;
+    if (!data || data.type !== ACTION_TYPE || data.action !== SET_QUALITY) return;
+    if (!data.payload || typeof data.payload.quality !== 'string') return;
+    applyQualityWithRetry(data.payload.quality);
   });
-
 })();
