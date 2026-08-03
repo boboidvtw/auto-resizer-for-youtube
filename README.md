@@ -75,11 +75,26 @@ youtube-auto-resizer-extension/
 
 ## 🧪 測試 (Tests)
 
+**單元測試**（零相依，Node 內建 test runner + `vm`）：
+
 ```bash
 node --test "tests/*.test.js"
 ```
 
-零相依（Node 內建 test runner + `vm`），涵蓋設定正規化、版面 CSS 產生器與 service worker 的 URL／尺寸驗證。
+涵蓋設定正規化、版面 CSS 產生器、視窗尺寸計算與 service worker 的 URL 驗證。
+
+**端到端測試**（真實載入的擴充功能 + 真實 YouTube + 真實彈出視窗，20 項檢查）：
+
+```bash
+bash tests/run-e2e.sh
+```
+
+會自動啟動獨立的 Brave 實例、載入本擴充功能、驗證兩欄／劇院／彈出視窗三種情境後關閉。
+
+> ⚠️ **必須用 Brave，不能用 Chrome**：Chrome 137+ 已停用 `--load-extension`
+> 且不會報錯（安靜略過），`--enable-unsafe-extension-debugging` 也救不回來。
+> 判斷載入的是否為本擴充功能，要用「絕對路徑 SHA256 前 32 hex 映射 a-p」算出的
+> unpacked extension ID 比對——`tests/e2e.js` 已內建此推導。
 
 ---
 
