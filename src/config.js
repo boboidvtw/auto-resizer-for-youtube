@@ -105,8 +105,13 @@ const YAR_DEFAULT_SETTINGS = {
 const YAR_MSG = {
   GET_SETTINGS: 'GET_SETTINGS',
   RESIZE_WINDOW: 'RESIZE_WINDOW',
-  OPEN_POPUP_PLAYER: 'OPEN_POPUP_PLAYER'
+  OPEN_POPUP_PLAYER: 'OPEN_POPUP_PLAYER',
+  /** 問 service worker：這個分頁是不是它開出來的彈出式播放器 */
+  IS_POPUP_PLAYER: 'IS_POPUP_PLAYER'
 };
+
+/** service worker 記住自己開過哪些彈出播放器分頁（放 storage.session，撐過 SW 回收） */
+const YAR_POPUP_TABS_KEY = 'yar_popup_player_tabs';
 
 /** 主世界 <-> 隔離世界 的事件 / postMessage 型別 */
 const YAR_CHANNEL = {

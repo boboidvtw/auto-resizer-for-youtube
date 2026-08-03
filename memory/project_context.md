@@ -1,6 +1,39 @@
 # Project Context & Handoff Log - YouTube Auto Resizer & Quality Controller
 
-> Last Closed: 2026-08-03T12:25:00+08:00 (v2.1.0, commit 7b9da2b)
+> Last Closed: 2026-08-04 (v2.2.0)
+
+---
+
+## 📌 v2.2.0 — 「自動調整尺寸」其實一直沒有作用
+
+使用者回報「還是不能自動」。量測後證實：**功能會跑、測試全綠、但實際只放大 16px。**
+
+- [x] **寬度公式預扣 400px 側欄（根因）**：`yarReserveTwoColumn` 扣掉側欄 + 間距共 472px，
+      於是播放器上限 = 視窗寬 - 472，而那正好是 YouTube 原生兩欄版面的寬度。
+      1600x863 視窗實測 default 1112px vs autoByQuality 1128px，差 16px（1.4%）。
+      更糟的是 4K 與 720p 都被同一個數字夾死 → `autoByQuality` 與 `fitWindow` 輸出**完全相同的 CSS**。
+      **教訓：有對照組才叫驗證。** 舊測試只斷言「CSS 含 100vw / 100vh」，
+      從沒拿「不啟用擴充功能」的尺寸比過，所以 20/20 全綠卻是壞的。
+- [x] **改成「播放器先取空間、側欄撿剩下的」**：寬度只扣頁面內距與捲軸；
+      側欄 `flex: 1 1 400px` + `#columns` `flex-flow: row wrap`，擠不下就自動換到播放器下方並撐滿。
+      換行判斷交給瀏覽器，不需要 JS 監聽 resize。實測 1392x783（+25%），垂直空白 228px → 80px。
+- [x] **`#columns` 的 min-width 是隱形的天花板**：YouTube 用 `--ytd-watch-flexy-player-width`
+      反推 `#columns` 的 min-width（播放器 1392px 時算出 1760px）。不歸零的話：①整頁長出橫向捲軸
+      ②**側欄永遠不會換行**——min-width 撐著，flex 容器不覺得空間不足。
+- [x] **ABR 抖動**：放大後才看得出來。YouTube 開播時畫質由低往上爬，播放器跟著跳好幾次。
+      改為升畫質立即跟進、降畫質需持續 4 秒（`QUALITY_SHRINK_SETTLE_MS`）才縮。
+- [x] **`#bottom-row` 的 -6px 負邊界**：零留白模式把頁面內距歸零後，這 12px 外擴就變成橫向捲軸。
+      原本是靠 YouTube 自己的 16px 內距吸收的。已用 `overflow-x: clip` 就地夾住。
+- [x] 側欄換行後播放器置中（靠左會在右邊留一條空白）；不再相依 `[is-two-columns_]` 私有屬性。
+
+## 📌 v2.2.0 — 彈出視窗身分改由 service worker 認定
+
+- [x] URL hash 標記是**競態**：YouTube SPA 載入後 `replaceState` 清掉 hash，
+      而 content script 在 `document_idle` 執行。慢一步就永遠讀不到 → 套用一般版面（頁首、推薦欄都在）。
+      v2.1 的「認出過一次就記住」只在「有認出過」時有效，沒解決根本問題；本次 e2e 就重現了失敗。
+      **修法：service worker 是唯一知道「這個分頁是我開的」的一方**，由它記住 tabId
+      （存 `storage.session` 以撐過 SW 閒置回收）並回答 `IS_POPUP_PLAYER`。
+- [x] 回覆是非同步的，這之前可能已經裝上彈出按鈕 → 確認身分後要 `removePopupButton()`。
 
 ---
 
@@ -42,15 +75,28 @@
 - 單元測試用 `node:vm` 載入 classic script；注意 `const` 宣告不會掛到 global 物件（要明確匯出），
   且跨 realm 物件比較要先 `JSON.parse(JSON.stringify(...))` 攤平。
 
-## ✅ 實測結果（1600x913 視窗，4K 影片）
+## ✅ 實測結果（v2.2.0，Brave，視窗內容區 1600x863）
 
-| 模式 | 播放器 | scrollW | 橫向溢出 |
+| 情境 | 播放器 | 側欄 | 橫向溢出 |
 |---|---|---|---|
-| autoByQuality | 1128x635 | 1600 | 否 |
-| fitWindow | 1128x635 | 1600 | 否 |
-| theater | 1481x833 | 1600 | 否 |
-| default | 1112x626 | 1600 | 否 |
-| 900px 視窗 + 4K | 852x479 | 900 | 否 |
+| default（不介入） | 1112x626 | 並排 456 | 否 |
+| autoByQuality / 4K | **1392x783** | 換行到下方 1600 | 否 |
+| autoByQuality / 240p 影片 | **426x240**（原生尺寸不放大） | 並排 1150 | 否 |
+| fitWindow / 同一支 240p | **1392x783** | 換行 | 否 |
+| theater | 1392x783 | 換行 | 否 |
+
+多視窗尺寸壓力測試（CDP `Emulation.setDeviceMetricsOverride` 改 viewport，比 `chrome.windows.update` 可靠）：
+
+| viewport | 播放器 | 側欄 |
+|---|---|---|
+| 1600x1000 | 1584x891 | 換行 |
+| 1200x900 | 1184x666 | 換行 |
+| 900x800 | 884x497 | 換行 |
+| 1900x700 | 1102x620 | **並排 774**（高度受限，寬度有剩） |
+| 700x700 | 684x385 | 換行 |
+
+全部情境皆無橫向溢出。`default` 模式在 1200x900 的模擬 viewport 下會溢出 21px —— 那是 YouTube
+自己的版面（我們一行 CSS 都沒出），不是本擴充功能造成的。
 
 畫質鎖定實測：設 480p → `getPlaybackQuality()` 由 `hd1080` 變 `large`。
 彈出播放器按鈕實測：送出 `OPEN_POPUP_PLAYER`（帶正確 videoId 與續播秒數）。
@@ -119,29 +165,35 @@
 
 | 項目 | 實測 |
 |---|---|
-| 一般兩欄 | 播放器 1128x635，scrollW 1600 = viewport，無溢出 |
+| 設定面板 → content script | 改模式即時反映（default styleLen 0 / auto 6867） |
+| **放大幅度對照** | 原生 1112x626 → 自動 1392x783（**+25.2%**） |
+| 垂直空間 | 剩 80px / 863px |
 | 原生劇院 | 完全不介入，播放器滿寬 1600，無溢出 |
-| 模式來回切換 | 兩邊都正常恢復 |
-| 彈出視窗比例 | 1.779 vs 影片 1.778（誤差 0.06%） |
+| 彈出視窗比例 | 1.784 vs 16:9 基準 1.778 |
 | 彈出視窗黑邊 | 空隙 0x0 |
-| 頁首/推薦欄/彈出按鈕 | 皆已收起 |
-| Service worker | 已註冊，共用設定載入成功 |
+| Service worker | 已註冊（檢查須緊接喚醒動作，MV3 閒置 30 秒就回收） |
 | 頁面例外 | 0 |
 
-端到端 20/20、單元測試 28/28 綠。
+端到端 26/26、單元測試 32/32 綠。
+
+**測試環境兩個坑**：
+- 全新 profile 會被 YouTube 擋機器人驗證牆（「登入帳戶以確認你不是機器人」），
+  此時 `getPlaybackQuality()` 回 `unknown`、`videoWidth` 為 0。版面量測仍有效，但畫質相關的路徑量不到。
+  換一支影片通常就過（實測 `aqz-KE-bpKQ` 被擋、`LXb3EKWsInQ` / `jNQXAC9IVRw` 正常）。
+- 彈出視窗在全新 profile 不會自動播放（媒體互動分數為零），長寬比校正會走 16:9 退路。
 
 ---
 
 ## 🎯 Next Session Goals
 
-- [x] ~~把 `e2e.js` 收進 repo~~ **已完成**（commit 7b9da2b）：`tests/e2e.js` 20 項檢查
-      + `tests/run-e2e.sh` 一鍵啟動 Brave；extension ID 由路徑推導不再硬編。
-- [ ] **非 16:9 影片的彈出視窗未實測**。長寬比已改用 `video.videoWidth/videoHeight`
+- [x] ~~設定面板端到端未測~~ **已完成**：e2e 直接開 `chrome-extension://<id>/popup.html`
+      並用它寫 `chrome.storage.sync`，覆蓋 popup → storage → content script 全鏈路。
+- [ ] **非 16:9 影片未實測**。彈出視窗長寬比已改用 `video.videoWidth/videoHeight`
       且單元測試涵蓋 4:3，但沒在真機驗過直式影片 / Shorts。
+      另外 watch 頁的 `--yar-player-h` 仍寫死 9/16，直式影片會有大片上下黑邊（同 YouTube 原生行為）。
+- [ ] **側欄並排時會被拉寬**（240p 影片實測 1150px）。flex-grow 讓它撿走所有剩餘空間，
+      推薦影片卡片會被拉長。要不要設上限待觀察。
 - [ ] **多螢幕情境未測**。`screen.avail*` 在副螢幕上的行為、視窗跨螢幕時的校正收斂。
-- [ ] **設定面板端到端未測**：popup.html 改設定 → content script 反應這條鏈路，
-      單元測試有覆蓋 schema，但沒在真機點過。可用 Brave CDP 開
-      `chrome-extension://<id>/popup.html` 驗證。
 - [ ] 觀察 Chromium 更新後 YouTube Polymer 版面變化——
-      `is-two-columns_` / `theater` / `full-bleed-player` 三個屬性名都是外部相依，
-      YouTube 改名就會全線失效。
+      `theater` / `full-bleed-player` 兩個屬性名仍是外部相依（`is-two-columns_` 已在 v2.2.0 拿掉）。
+      YouTube 若改用別的變數算 `#columns` 的 min-width，換行邏輯也會失效。

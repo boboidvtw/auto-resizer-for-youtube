@@ -94,6 +94,15 @@ const check = (name, pass, detail) => {
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
 };
 
+/** 從真實的設定面板寫入設定，順便覆蓋 popup -> storage -> content script 這條鏈路 */
+const SETTINGS = (mode) => JSON.stringify({
+  enabled: true,
+  resizeMode: mode,
+  preferredQuality: 'auto',
+  removeSideGaps: true,
+  resizeMainWindow: false
+});
+
 (async () => {
   // ---------- 1. 一般兩欄模式 ----------
   let page = await findPage((t) => t.url.includes('youtube.com/watch'));
@@ -104,13 +113,51 @@ const check = (name, pass, detail) => {
   }
   await sleep(4000);
 
+  // ---------- 1a. 設定面板 -> content script（含「有沒有真的變大」的對照） ----------
+  await main.send('Target.createTarget', { url: `chrome-extension://${EXT_ID}/popup.html` });
+  await sleep(2500);
+  const panelTarget = await findPage((t) => t.url.includes('popup.html'));
+  check('設定面板可開啟', !!panelTarget, panelTarget ? '' : `找不到 chrome-extension://${EXT_ID}/popup.html`);
+
+  if (panelTarget) {
+    const panel = await Sess.open(panelTarget.webSocketDebuggerUrl);
+    const applyMode = async (mode) => {
+      await panel.eval(`new Promise(r => chrome.storage.sync.set({ yt_auto_resizer_settings: ${SETTINGS(mode)} }, r))`);
+      await sleep(3000);
+      return main.eval(PROBE);
+    };
+
+    const native = await applyMode('default');
+    const auto = await applyMode('autoByQuality');
+    check('設定面板改模式會即時反映到頁面', native.styleLen === 0 && auto.styleLen > 0,
+      `default styleLen=${native.styleLen} auto styleLen=${auto.styleLen}`);
+
+    /*
+     * 這是整個擴充功能存在的理由：自動模式必須明顯大於 YouTube 原生尺寸。
+     * 曾經因為寬度公式預扣 400px 側欄，1600px 視窗上原生 1112px、自動 1128px，
+     * 只差 16px —— 使用者的回報就是「還是不能自動」。
+     */
+    const gain = auto.moviePlayer.w / native.moviePlayer.w;
+    check('自動模式必須明顯放大播放器', gain >= 1.15,
+      `原生 ${native.moviePlayer.w}x${native.moviePlayer.h} -> 自動 ${auto.moviePlayer.w}x${auto.moviePlayer.h} (${(gain * 100 - 100).toFixed(1)}%)`);
+
+    const wasted = auto.viewport.h - auto.moviePlayer.h;
+    check('自動模式應吃滿視窗高度', wasted <= 140, `垂直剩餘 ${wasted}px / 視窗高 ${auto.viewport.h}px`);
+    check('自動模式無橫向溢出', !auto.overflow, `scrollW=${auto.scrollW} viewport=${auto.viewport.w}`);
+    check('側欄放不下時已換行到下方', auto.secondary.w > auto.primary.w * 0.9,
+      `primary=${auto.primary.w} secondary=${auto.secondary.w}`);
+  }
+
   let p = await main.eval(PROBE);
   check('擴充功能已注入', p.styleLen > 0 && p.scripts[0] && p.scripts[1], `styleLen=${p.styleLen} scripts=${p.scripts}`);
   check('控制列按鈕已注入', p.popupButton);
   check('一般模式無橫向溢出', !p.overflow, `scrollW=${p.scrollW} viewport=${p.viewport.w}`);
   check('影片高度未塌陷', p.video && p.video.h > 1, `video=${p.video.w}x${p.video.h}`);
-  const twoColFit = p.primary && p.secondary && p.primary.w + p.secondary.w <= p.viewport.w;
-  check('兩欄總寬未超出視窗', twoColFit, `primary=${p.primary.w} secondary=${p.secondary.w} viewport=${p.viewport.w}`);
+  // 側欄擠不下時會換行到播放器下方，所以不能再要求「兩欄相加 <= 視窗寬」，
+  // 該看的是每一欄各自都在視窗內（真正的溢出由上面的 scrollWidth 檢查把關）。
+  const columnsFit = p.primary && p.secondary
+    && p.primary.w <= p.viewport.w && p.secondary.w <= p.viewport.w;
+  check('每一欄都在視窗內', columnsFit, `primary=${p.primary.w} secondary=${p.secondary.w} viewport=${p.viewport.w}`);
   const baseline = p;
 
   // ---------- 2. YouTube 原生劇院模式 ----------
@@ -137,6 +184,18 @@ const check = (name, pass, detail) => {
   const popupTarget = watchPages.find((t) => t.id !== page.id);
   check('彈出視窗已開啟', !!popupTarget, popupTarget ? `共 ${watchPages.length} 個 watch 分頁` : '沒有新視窗');
 
+  /*
+   * Service worker 檢查必須緊接在剛剛喚醒它的動作之後。MV3 的 service worker 閒置約 30 秒
+   * 就會被回收，放到最後檢查會拿到「找不到」的假失敗（實測過一次）。
+   */
+  const swTarget = (await targets()).find((x) => x.url === `chrome-extension://${EXT_ID}/background.js`);
+  check('Service worker 已註冊', !!swTarget, swTarget ? swTarget.url : '找不到（可能已閒置回收）');
+  if (swTarget) {
+    const sw = await Sess.open(swTarget.webSocketDebuggerUrl);
+    const swOk = await sw.eval(`typeof yarBuildPopupUrl === 'function' && typeof yarFitWindowSize === 'function'`);
+    check('Service worker 載入共用設定成功', swOk);
+  }
+
   if (popupTarget) {
     const pop = await Sess.open(popupTarget.webSocketDebuggerUrl);
     for (let i = 0; i < 30; i++) {
@@ -157,23 +216,21 @@ const check = (name, pass, detail) => {
     check('彈出視窗影片填滿內容區(無黑邊)', Math.abs(gapX) <= 4 && Math.abs(gapY) <= 4,
       `viewport=${pp.viewport.w}x${pp.viewport.h} video=${vw}x${vh} 空隙=${gapX}x${gapY}`);
 
-    const nativeRatio = (() => { const [w, h] = pp.videoNative.split('x').map(Number); return w / h; })();
+    /*
+     * 全新的測試 profile 媒體互動分數為零，YouTube 會擋掉彈出視窗的自動播放，
+     * 影片中繼資料因此不會載入（videoWidth 維持 0）。此時校正用的是 16:9 退路值，
+     * 就拿 16:9 當基準比對，否則會拿 NaN 去比而得到假失敗。
+     */
+    const [nw, nh] = pp.videoNative.split('x').map(Number);
+    const loaded = nw > 0 && nh > 0;
+    const nativeRatio = loaded ? nw / nh : 16 / 9;
     const contentRatio = pp.viewport.w / pp.viewport.h;
     check('彈出視窗內容區符合影片長寬比', Math.abs(contentRatio - nativeRatio) < 0.03,
-      `content=${contentRatio.toFixed(3)} native=${nativeRatio.toFixed(3)} (${pp.videoNative}) chrome=${pp.chromeSize.w}x${pp.chromeSize.h}`);
+      `content=${contentRatio.toFixed(3)} 基準=${nativeRatio.toFixed(3)} (${loaded ? pp.videoNative : '影片未自動播放，用 16:9 退路'}) chrome=${pp.chromeSize.w}x${pp.chromeSize.h}`);
     check('彈出視窗未超出螢幕', pp.outer.h <= 1200 && pp.outer.w <= 2000, `outer=${pp.outer.w}x${pp.outer.h}`);
 
     results.__popupDetail = pp;
     await pop.send('Runtime.evaluate', { expression: 'window.close()' }).catch(() => {});
-  }
-
-  // ---------- 4. Service worker 錯誤檢查 ----------
-  const swTarget = (await targets()).find((x) => x.url === `chrome-extension://${EXT_ID}/background.js`);
-  check('Service worker 已註冊', !!swTarget, swTarget ? swTarget.url : '找不到');
-  if (swTarget) {
-    const sw = await Sess.open(swTarget.webSocketDebuggerUrl);
-    const swOk = await sw.eval(`typeof yarBuildPopupUrl === 'function' && typeof yarFitWindowSize === 'function'`);
-    check('Service worker 載入共用設定成功', swOk);
   }
 
   check('頁面無未捕捉例外', main.errors.length === 0, main.errors.slice(0, 3).join(' | '));

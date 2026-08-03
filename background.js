@@ -58,6 +58,54 @@ function yarHandleResizeWindow(message, sender) {
   });
 }
 
+/* -------------------------------------------------- 彈出播放器分頁的身分登記
+ *
+ * 原本靠 URL hash (#yar-popup) 讓 content script 認出自己，但 YouTube 的 SPA 載入後會
+ * replaceState 把 hash 清掉。清掉的時機和 content script 在 document_idle 執行的時機是
+ * 競態 —— 慢一步就永遠讀不到標記，彈出視窗於是套用一般版面（頁首、推薦欄全都在，
+ * 尺寸校正也失效）。實測就重現過。
+ *
+ * service worker 是唯一知道「這個分頁是我開的」的一方，改由它來回答；
+ * 存在 storage.session 是為了撐過 service worker 的閒置回收。
+ */
+
+/** 純函式：登記分頁 id（去重、不修改輸入） */
+function yarAddPopupTab(tabIds, tabId) {
+  const ids = Array.isArray(tabIds) ? tabIds : [];
+  if (!Number.isFinite(tabId) || ids.includes(tabId)) return ids.slice();
+  return ids.concat(tabId);
+}
+
+/** 純函式：移除已關閉的分頁 id */
+function yarRemovePopupTab(tabIds, tabId) {
+  const ids = Array.isArray(tabIds) ? tabIds : [];
+  return ids.filter((id) => id !== tabId);
+}
+
+function yarUpdatePopupTabs(transform) {
+  chrome.storage.session.get([YAR_POPUP_TABS_KEY], (stored) => {
+    if (chrome.runtime.lastError) return;
+    const next = transform(stored && stored[YAR_POPUP_TABS_KEY]);
+    chrome.storage.session.set({ [YAR_POPUP_TABS_KEY]: next });
+  });
+}
+
+function yarHandleIsPopupPlayer(sender, sendResponse) {
+  const tabId = sender.tab && sender.tab.id;
+  if (!Number.isFinite(tabId)) {
+    sendResponse({ isPopupPlayer: false });
+    return;
+  }
+  chrome.storage.session.get([YAR_POPUP_TABS_KEY], (stored) => {
+    const ids = (stored && stored[YAR_POPUP_TABS_KEY]) || [];
+    sendResponse({ isPopupPlayer: Array.isArray(ids) && ids.includes(tabId) });
+  });
+}
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  yarUpdatePopupTabs((ids) => yarRemovePopupTab(ids, tabId));
+});
+
 function yarHandleOpenPopupPlayer(message) {
   const url = yarBuildPopupUrl(message.videoId, message.startTime);
   if (!url) {
@@ -65,8 +113,13 @@ function yarHandleOpenPopupPlayer(message) {
     return;
   }
   const size = yarClampWindowSize(message.width, message.height) || YAR_POPUP_DEFAULT;
-  chrome.windows.create({ url, type: 'popup', focused: true, ...size }, () => {
-    if (chrome.runtime.lastError) yarWarn('開啟彈出式播放器失敗:', chrome.runtime.lastError.message);
+  chrome.windows.create({ url, type: 'popup', focused: true, ...size }, (win) => {
+    if (chrome.runtime.lastError) {
+      yarWarn('開啟彈出式播放器失敗:', chrome.runtime.lastError.message);
+      return;
+    }
+    const tabId = win && win.tabs && win.tabs[0] && win.tabs[0].id;
+    if (Number.isFinite(tabId)) yarUpdatePopupTabs((ids) => yarAddPopupTab(ids, tabId));
   });
 }
 
@@ -83,6 +136,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case YAR_MSG.OPEN_POPUP_PLAYER:
       yarHandleOpenPopupPlayer(message);
       return false;
+    case YAR_MSG.IS_POPUP_PLAYER:
+      yarHandleIsPopupPlayer(sender, sendResponse);
+      return true; // 非同步回覆
     default:
       return false;
   }

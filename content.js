@@ -17,9 +17,19 @@
   const POPUP_MAX_CALIBRATIONS = 8;
   /** 收斂容差：視窗尺寸有系統粒度，硬要逼到 1px 只會換來無效重試 */
   const POPUP_CALIBRATION_TOLERANCE_PX = 8;
+  /**
+   * 降畫質要等它穩定才縮小播放器。YouTube 的 ABR 幾乎每支影片開播都是由低往上爬
+   * （medium -> hd720 -> hd1080），中途也會因網路抖動短暫掉下來；照單全收的話
+   * autoByQuality 模式下播放器會在開播前十秒連跳好幾次尺寸。
+   */
+  const QUALITY_SHRINK_SETTLE_MS = 4000;
 
   let settings = yarNormalizeSettings(null);
+  /** 版面實際採用的畫質（升畫質立即跟進，降畫質需先穩定） */
   let lastQuality = null;
+  /** 主世界最後一次回報的畫質，用來判斷降畫質是否已經穩定 */
+  let reportedQuality = null;
+  let shrinkTimer = null;
   let lastVideoId = null;
   let lastVideoW = 0;
   let lastVideoH = 0;
@@ -63,10 +73,11 @@
   /**
    * 由 background.js 開啟的彈出式播放器視窗。
    *
-   * 標記是 URL hash，但 YouTube 的 SPA 在載入完成後會用 replaceState 把 hash 清掉，
-   * 所以不能每次都重新讀 hash —— 一旦讀不到就會退回一般模式，把 popup 樣式覆蓋掉、
-   * 視窗尺寸校正也一併失效（實測就是這樣造成播放器四周出現黑邊）。
-   * 因此只要認出過一次就記住，並額外接受我們自己掛在 <html> 上的屬性作為佐證。
+   * URL hash 標記只是快速路徑：YouTube 的 SPA 載入完成後會用 replaceState 把 hash 清掉，
+   * 而清掉的時機與本 script 在 document_idle 執行的時機是競態 —— 慢一步就永遠讀不到，
+   * 於是彈出視窗套用一般版面（頁首與推薦欄都在、尺寸校正失效）。實測重現過。
+   * 權威答案來自 service worker（見 askServiceWorkerIfPopupPlayer），它才知道分頁是誰開的。
+   * 認出過一次就記住，並接受我們自己掛在 <html> 上的屬性作為佐證。
    */
   function isPopupPlayerWindow() {
     if (popupPlayerWindow) return true;
@@ -77,6 +88,20 @@
       popupPlayerWindow = true;
     }
     return popupPlayerWindow;
+  }
+
+  /** 向 service worker 確認身分；只在還沒認出時問，答案為是就立刻改套 popup 版面 */
+  function askServiceWorkerIfPopupPlayer() {
+    if (popupPlayerWindow) return;
+    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) return;
+    chrome.runtime.sendMessage({ action: YAR_MSG.IS_POPUP_PLAYER }, (response) => {
+      if (chrome.runtime.lastError || !response || !response.isPopupPlayer || popupPlayerWindow) return;
+      popupPlayerWindow = true;
+      applyPlayerLayout();
+      scheduleWindowCalibration();
+      // 回覆是非同步的，這之前可能已經照一般視窗的規則裝上了彈出按鈕，要收回來
+      removePopupButton();
+    });
   }
 
   function applyPlayerLayout() {
@@ -106,6 +131,7 @@
   }
 
   yarLoadSettings().then(adoptSettings);
+  askServiceWorkerIfPopupPlayer();
 
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
     chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -194,9 +220,9 @@
     // 待彈出視窗自己載入後再校正。
     const measured = isPopup === isPopupPlayerWindow() ? measuredWindowChrome() : null;
 
-    const contentExtraWidth = isPopup
-      ? 0
-      : YAR_LAYOUT.SIDEBAR_WIDTH + YAR_LAYOUT.COLUMN_GAP + YAR_LAYOUT.PAGE_PADDING + YAR_LAYOUT.SCROLLBAR_RESERVE;
+    // 一般視窗：側欄不再固定佔住播放器右側（放不下就換行到下方，見 layout.js 的
+    // yarColumnsCss），所以只需扣掉頁面內距與捲軸，與 CSS 的寬度運算式同一套假設。
+    const contentExtraWidth = isPopup ? 0 : yarReservePageWidth(settings.removeSideGaps);
     const fallbackChromeHeight = isPopup
       ? YAR_LAYOUT.POPUP_CHROME_HEIGHT
       : YAR_LAYOUT.MASTHEAD_HEIGHT + YAR_LAYOUT.WINDOW_CHROME_HEIGHT;
@@ -313,6 +339,38 @@
 
   // ------------------------------------------------ 主世界畫質事件接收
 
+  /** 畫質代碼對應的原生寬度，用來比較「哪個比較大」 */
+  function qualityWidth(quality) {
+    return YAR_QUALITY_WIDTH[quality] || 0;
+  }
+
+  /**
+   * 決定版面要採用的畫質。
+   * 升畫質立即跟進（使用者期待的就是變大）；降畫質先等 QUALITY_SHRINK_SETTLE_MS，
+   * 期間又升回去就不縮，藉此濾掉 ABR 抖動。
+   * @returns {boolean} 是否需要立即重新套用版面
+   */
+  function adoptQuality(quality) {
+    reportedQuality = quality;
+    if (shrinkTimer) {
+      clearTimeout(shrinkTimer);
+      shrinkTimer = null;
+    }
+    if (!lastQuality || qualityWidth(quality) >= qualityWidth(lastQuality)) {
+      lastQuality = quality;
+      return true;
+    }
+    shrinkTimer = setTimeout(() => {
+      shrinkTimer = null;
+      // 這段期間畫質又變了就不算數，交給後來那次事件處理
+      if (reportedQuality !== quality || qualityWidth(quality) >= qualityWidth(lastQuality)) return;
+      lastQuality = quality;
+      applyPlayerLayout();
+      syncBrowserWindow();
+    }, QUALITY_SHRINK_SETTLE_MS);
+    return false;
+  }
+
   function handleQualityChange(event) {
     const detail = event.detail || {};
     if (!detail.quality) return;
@@ -323,16 +381,19 @@
       lastSentWindowSize = '';
       popupCalibrations = 0;
       popupCalibrationScheduled = false;
+      lastQuality = null;   // 換影片就重新開始比較，否則上一支的高畫質會鎖住新影片的尺寸
     }
-    lastQuality = detail.quality;
+    const layoutChanged = adoptQuality(detail.quality);
     if (detail.videoWidth > 0 && detail.videoHeight > 0) {
       lastVideoW = detail.videoWidth;
       lastVideoH = detail.videoHeight;
     }
 
-    applyPlayerLayout();
+    if (layoutChanged) {
+      applyPlayerLayout();
+      syncBrowserWindow();
+    }
     pushPreferredQuality();
-    syncBrowserWindow();
     scheduleWindowCalibration();
   }
 
@@ -342,9 +403,15 @@
 
   function handlePageNavigation() {
     injectMainWorldScripts();
+    askServiceWorkerIfPopupPlayer();
     if (!isWatchPage()) {
       clearStyle();
+      if (shrinkTimer) {
+        clearTimeout(shrinkTimer);
+        shrinkTimer = null;
+      }
       lastQuality = null;
+      reportedQuality = null;
       lastVideoId = null;
       return;
     }
@@ -420,6 +487,16 @@
       yarWarn('注入彈出播放器按鈕失敗:', err.message);
       return true; // 失敗就不再重試，避免無限迴圈
     }
+  }
+
+  /** 移除彈出按鈕並停止重試（用於事後才確認自己是彈出視窗的情況） */
+  function removePopupButton() {
+    if (buttonTimer) {
+      clearTimeout(buttonTimer);
+      buttonTimer = null;
+    }
+    const existing = document.getElementById(POPUP_BUTTON_ID);
+    if (existing) existing.remove();
   }
 
   /** 有界重試：找到控制列即停，不做永久輪詢 */

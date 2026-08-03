@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YouTube Auto Resizer & Quality Controller",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "自動調整 YouTube 播放器視訊尺寸與畫質，實現滿視窗貼合與零留白的最佳觀賞體驗。",
   "permissions": [
     "storage"

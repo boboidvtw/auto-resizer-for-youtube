@@ -1,4 +1,4 @@
-# 🎬 YouTube Auto Resizer & Quality Controller v2.1.0
+# 🎬 YouTube Auto Resizer & Quality Controller v2.2.0
 
 > 依畫質與視窗大小自動調整 YouTube 播放器尺寸，零留白、不溢出、可鎖定畫質。
 > Resize the YouTube player to fit your window and quality, lock playback quality, and pop the video out — Manifest V3.
@@ -13,15 +13,19 @@
 
 ### 四種尺寸模式 (Four resize modes)
 
-| 模式 Mode | 行為 Behaviour |
-|---|---|
-| **依畫質自動匹配** `autoByQuality` | 以影片原生解析度為寬度上限（4K → 3840px），再由視窗寬高夾擠到可容納的最大 16:9 尺寸 |
-| **強制視窗貼合** `fitWindow` | 忽略畫質，一律撐滿視窗可用空間 |
-| **強制劇院模式** `theater` | 播放器滿寬，推薦影片欄移到下方 |
-| **預設** `default` | 完全不介入，維持 YouTube 原生版面 |
+| 模式 Mode | 行為 Behaviour | 1600x863 視窗實測 |
+|---|---|---|
+| **依畫質自動匹配** `autoByQuality` | 以影片原生解析度為寬度上限（4K → 3840px），再由視窗寬高夾擠到可容納的最大 16:9 尺寸 | 4K 影片 **1392x783**；240p 影片 426x240（不放大糊圖） |
+| **強制視窗貼合** `fitWindow` | 忽略畫質，一律撐滿視窗可用空間 | 一律 **1392x783** |
+| **強制劇院模式** `theater` | 播放器滿寬，推薦影片欄移到下方 | 1392x783 |
+| **預設** `default` | 完全不介入，維持 YouTube 原生版面 | 1112x626 |
 
-寬度以 CSS `min()` 表示，因此**縮放視窗時瀏覽器自行重算**，不需要 JS 監聽 resize，也不會因為視窗未最大化而溢出畫面。
-Width is expressed as a CSS `min()` expression, so the browser reflows on its own — no JS resize listener, and no horizontal overflow when the window isn't maximised.
+**播放器優先取得空間，推薦側欄撿剩下的。** 側欄放不下時由 `#columns` 的 `flex-wrap` 自動換到播放器下方，
+換行判斷交給瀏覽器，因此縮放視窗會即時切換、不需要 JS 監聽 resize。
+寬度同樣以 CSS `min()` 表示，視窗未最大化時也不會溢出畫面。
+
+The player claims space first; the recommendations rail takes what is left and wraps below when it no longer fits.
+Both the wrap decision and the width are pure CSS, so the browser reflows on its own — no JS resize listener.
 
 ### 其他 (Other)
 
@@ -34,7 +38,7 @@ Width is expressed as a CSS `min()` expression, so the browser reflows on its ow
   實作上開的是一般 watch 頁加 `#yar-popup` 標記，再由 content script 收版面 ——
   不走 `youtube.com/embed/`，因為該路徑設計給 iframe，直接當頂層視窗開啟時
   YouTube 一律回「錯誤 153 影片播放器設定錯誤」，與影片本身是否允許嵌入無關。
-- 📐 **零留白版面**：消除播放器兩側與上方留白；窄視窗下 YouTube 自行收成單欄時會自動跟隨，不硬扣側欄寬度。
+- 📐 **零留白版面**：消除播放器兩側與上方留白；側欄擠不下時自動換行到下方，播放器置中。
 - 🔄 **同步瀏覽器視窗尺寸**（預設關閉）：依畫質調整整個瀏覽器視窗大小。
 
 ---
@@ -83,13 +87,15 @@ node --test "tests/*.test.js"
 
 涵蓋設定正規化、版面 CSS 產生器、視窗尺寸計算與 service worker 的 URL 驗證。
 
-**端到端測試**（真實載入的擴充功能 + 真實 YouTube + 真實彈出視窗，20 項檢查）：
+**端到端測試**（真實載入的擴充功能 + 真實 YouTube + 真實彈出視窗，26 項檢查）：
 
 ```bash
 bash tests/run-e2e.sh
 ```
 
-會自動啟動獨立的 Brave 實例、載入本擴充功能、驗證兩欄／劇院／彈出視窗三種情境後關閉。
+會自動啟動獨立的 Brave 實例、載入本擴充功能，驗證設定面板、放大幅度、兩欄／劇院／彈出視窗後關閉。
+其中一項是**對照檢查**：先切到 `default` 量 YouTube 原生尺寸，再切到 `autoByQuality`，
+要求播放器至少大 15%。這條就是為了擋住 v2.1 那種「跑得動、測得過、但實際只大 16px」的失效。
 
 > ⚠️ **必須用 Brave，不能用 Chrome**：Chrome 137+ 已停用 `--load-extension`
 > 且不會報錯（安靜略過），`--enable-unsafe-extension-debugging` 也救不回來。
@@ -97,6 +103,26 @@ bash tests/run-e2e.sh
 > unpacked extension ID 比對——`tests/e2e.js` 已內建此推導。
 
 ---
+
+## 📝 v2.2.0 修正 (Changelog)
+
+**「自動調整尺寸」在 v2.1 其實等於沒有作用**，本版是針對這件事的修復。
+
+1. **寬度公式預扣了 400px 側欄** — 播放器上限因此永遠等於 YouTube 原生的兩欄寬度。
+   1600x863 視窗實測：原生 1112px、`autoByQuality` 1128px，**只差 16px（1.4%）**，肉眼看不出來。
+   而且不論 4K 或 720p 都被同一個數字夾死，`autoByQuality` 與 `fitWindow` 產生的 CSS 一模一樣，
+   模式選單形同虛設。改為「播放器先取空間、側欄撿剩下的、擠不下就換行」後，同一情境變成 **1392x783（+25%）**，
+   垂直空白從 228px 降到 80px。
+2. **`#columns` 的 min-width 由 YouTube 依播放器寬度反推** — 播放器一放大就長出橫向捲軸
+   （實測 min-width 被算成 1760px），而且 min-width 撐著，flex 容器永遠不覺得空間不足、側欄也就永遠不換行。已強制歸零。
+3. **彈出視窗認不出自己** — 標記放在 URL hash，但 YouTube 的 SPA 會 `replaceState` 清掉它，
+   與 content script 在 `document_idle` 執行是競態，慢一步就套用一般版面（頁首、推薦欄全在，尺寸校正失效）。
+   改由 service worker 記住自己開的分頁 id（存 `storage.session`，撐過 SW 閒置回收）來回答，不再依賴會被清掉的 hash。
+4. **ABR 抖動造成尺寸連跳** — 放大後才看得出來：YouTube 開播時畫質由低往上爬，播放器會跟著跳好幾次。
+   現在升畫質立即跟進、降畫質需持續 4 秒才縮。
+5. 其他：`#bottom-row` 的 -6px 負邊界在零留白模式下露出 12px 溢出（已就地夾住）；
+   側欄換行後播放器置中；不再相依 `[is-two-columns_]` 這個 Polymer 私有屬性；
+   單元測試 28 → 32、端到端 20 → 26（新增放大幅度對照與設定面板鏈路）。
 
 ## 📝 v2.1.0 修正 (Changelog)
 
