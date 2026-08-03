@@ -1,6 +1,6 @@
 # Project Context & Handoff Log - YouTube Auto Resizer & Quality Controller
 
-> Last Closed: 2026-08-03T11:50:00+08:00 (v2.1.0, commit 9c5f6a0)
+> Last Closed: 2026-08-03T12:25:00+08:00 (v2.1.0, commit 7b9da2b)
 
 ---
 
@@ -110,7 +110,7 @@
 ```
 
 `--window-position` 的 y 給 40 避開 macOS 選單列。
-端到端腳本在 scratchpad 的 `e2e.js`（20 項檢查），值得下次重建。
+端到端腳本已進版控：`tests/e2e.js` + `tests/run-e2e.sh`（一鍵跑，20 項檢查）。
 
 ⚠️ **Brave 會偽裝 UA 成 "Google Chrome" 並移除 `navigator.brave`**，不可用 UA 判斷瀏覽器。
 ⚠️ 判斷擴充功能是否為自己的，要用「絕對路徑 SHA256 前 32 hex 映射 a-p」算 ID 比對。
@@ -134,8 +134,8 @@
 
 ## 🎯 Next Session Goals
 
-- [ ] **把 `e2e.js` 收進 repo**（目前只在 scratchpad，會被清掉）。20 項端到端檢查
-      + Brave 啟動指令腳本化，讓下次改動能一鍵回歸。
+- [x] ~~把 `e2e.js` 收進 repo~~ **已完成**（commit 7b9da2b）：`tests/e2e.js` 20 項檢查
+      + `tests/run-e2e.sh` 一鍵啟動 Brave；extension ID 由路徑推導不再硬編。
 - [ ] **非 16:9 影片的彈出視窗未實測**。長寬比已改用 `video.videoWidth/videoHeight`
       且單元測試涵蓋 4:3，但沒在真機驗過直式影片 / Shorts。
 - [ ] **多螢幕情境未測**。`screen.avail*` 在副螢幕上的行為、視窗跨螢幕時的校正收斂。
