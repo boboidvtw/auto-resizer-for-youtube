@@ -11,12 +11,17 @@ importScripts('src/config.js');
 const YAR_WINDOW_BOUNDS = { minWidth: 400, minHeight: 300, maxWidth: 7680, maxHeight: 4320 };
 const YAR_POPUP_DEFAULT = { width: 960, height: 580 };
 
+/** 單一維度夾擠 */
+function yarClampDimension(value, min, max) {
+  return Math.round(Math.min(Math.max(value, min), max));
+}
+
 /** 夾擠到合法視窗尺寸；非數字回傳 null */
 function yarClampWindowSize(width, height) {
   if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
   return {
-    width: Math.round(Math.min(Math.max(width, YAR_WINDOW_BOUNDS.minWidth), YAR_WINDOW_BOUNDS.maxWidth)),
-    height: Math.round(Math.min(Math.max(height, YAR_WINDOW_BOUNDS.minHeight), YAR_WINDOW_BOUNDS.maxHeight))
+    width: yarClampDimension(width, YAR_WINDOW_BOUNDS.minWidth, YAR_WINDOW_BOUNDS.maxWidth),
+    height: yarClampDimension(height, YAR_WINDOW_BOUNDS.minHeight, YAR_WINDOW_BOUNDS.maxHeight)
   };
 }
 
@@ -31,10 +36,24 @@ function yarBuildPopupUrl(videoId, startTime) {
   return `https://www.youtube.com/watch?v=${videoId}&t=${start}s#${YAR_POPUP_MARKER}`;
 }
 
+/**
+ * 支援只更新單一維度。彈出視窗校正時，一旦偵測到高度被系統限制（macOS 選單列會把
+ * 放在工作區外的視窗往下推並截短），就必須停止重送高度 —— 每重送一次都會再損失
+ * 一個選單列的高度，視窗會一路縮小下去。
+ */
 function yarHandleResizeWindow(message, sender) {
-  const size = yarClampWindowSize(message.width, message.height);
-  if (!size || !sender.tab || typeof sender.tab.windowId !== 'number') return;
-  chrome.windows.update(sender.tab.windowId, { state: 'normal', ...size }, () => {
+  if (!sender.tab || typeof sender.tab.windowId !== 'number') return;
+
+  const update = { state: 'normal' };
+  if (Number.isFinite(message.width)) {
+    update.width = yarClampDimension(message.width, YAR_WINDOW_BOUNDS.minWidth, YAR_WINDOW_BOUNDS.maxWidth);
+  }
+  if (Number.isFinite(message.height)) {
+    update.height = yarClampDimension(message.height, YAR_WINDOW_BOUNDS.minHeight, YAR_WINDOW_BOUNDS.maxHeight);
+  }
+  if (update.width === undefined && update.height === undefined) return;
+
+  chrome.windows.update(sender.tab.windowId, update, () => {
     if (chrome.runtime.lastError) yarWarn('調整視窗失敗:', chrome.runtime.lastError.message);
   });
 }
