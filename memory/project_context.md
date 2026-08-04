@@ -1,6 +1,7 @@
 # Project Context & Handoff Log - YouTube Auto Resizer & Quality Controller
 
-> Last Closed: 2026-08-04T19:55:21+08:00 (v2.3.0, commit b7c4eb2 — 4K / 多螢幕適配)
+> Last Closed: 2026-08-04T20:54:25+08:00 (v2.3.0, code commit b7c4eb2 — 4K / 多螢幕適配；
+> 跨螢幕拖曳實測於 d3b4686 補記)
 
 ---
 
