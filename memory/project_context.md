@@ -1,6 +1,6 @@
 # Project Context & Handoff Log - YouTube Auto Resizer & Quality Controller
 
-> Last Closed: 2026-08-04 (v2.3.0，4K / 多螢幕適配)
+> Last Closed: 2026-08-04T19:55:21+08:00 (v2.3.0, commit b7c4eb2 — 4K / 多螢幕適配)
 
 ---
 
@@ -278,6 +278,16 @@ YouTube player 物件（頁面可控），原本用 `YAR_QUALITY_WIDTH[code] || 
 ---
 
 ## 🎯 Next Session Goals
+
+- [ ] **拖曳視窗跨螢幕的即時反應未實測**（v2.3.0 唯一沒驗到的子題）。
+      已實作 `matchMedia('(resolution: Ndppx)')` 重新綁定 + 500ms debounce 的 resize 重算，
+      但只在同一台螢幕上縮放驗過。CDP 不好模擬拖曳，需要手動把視窗從內建拖到 4K 上，
+      確認畫質請求與 allowUpscale 有跟著翻轉。
+- [ ] **`content.js` 已 661 行**，逼近 `coding-style.md` 的 800 上限。
+      下次動它之前先考慮拆分（螢幕感知那一段是自然的切點）。
+- [ ] `SCREEN=uhd` 的 e2e 視窗座標寫死 `1710,40`。螢幕排列改變（左右對調、換解析度）
+      就會開到錯的地方，要用 `chrome.system.display.getInfo()` 重新量。
+      本 session 中途就遇過內建螢幕縮放被改動，不是假設性風險。
 
 - [x] ~~設定面板端到端未測~~ **已完成**：e2e 直接開 `chrome-extension://<id>/popup.html`
       並用它寫 `chrome.storage.sync`，覆蓋 popup → storage → content script 全鏈路。
