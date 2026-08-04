@@ -1,10 +1,11 @@
 {
   "manifest_version": 3,
   "name": "YouTube Auto Resizer & Quality Controller",
-  "version": "2.2.0",
-  "description": "自動調整 YouTube 播放器視訊尺寸與畫質，實現滿視窗貼合與零留白的最佳觀賞體驗。",
+  "version": "2.3.0",
+  "description": "自動調整 YouTube 播放器視訊尺寸與畫質，依螢幕解析度適配 4K 與多螢幕，實現滿視窗貼合與零留白的最佳觀賞體驗。",
   "permissions": [
-    "storage"
+    "storage",
+    "system.display"
   ],
   "host_permissions": [
     "https://www.youtube.com/*"
@@ -25,7 +26,7 @@
   "content_scripts": [
     {
       "matches": ["https://www.youtube.com/*"],
-      "js": ["src/config.js", "src/layout.js", "content.js"],
+      "js": ["src/config.js", "src/display.js", "src/layout.js", "content.js"],
       "run_at": "document_idle"
     }
   ],

@@ -16,7 +16,7 @@
         </svg>
         <div class="title-group">
           <h1>Auto Resizer</h1>
-          <span class="badge">v2.2</span>
+          <span class="badge">v2.3</span>
         </div>
       </div>
       <label class="switch">
@@ -74,6 +74,35 @@
             </div>
           </label>
         </div>
+      </section>
+
+      <!-- Display Awareness -->
+      <section class="section" aria-labelledby="display-section-label">
+        <label class="section-label" id="display-section-label">螢幕適配</label>
+        <ul class="display-list" id="display-list">
+          <li class="display-row display-row--empty">偵測顯示器中…</li>
+        </ul>
+        <label class="checkbox-label">
+          <input type="checkbox" id="displayAwareQuality-toggle" checked>
+          <span>依螢幕解析度自動提升畫質</span>
+        </label>
+        <select id="autoQualityCeiling-select" class="select-input" aria-label="自動畫質上限">
+          <option value="hd2160">自動畫質上限：4K (2160p)</option>
+          <option value="hd1440">自動畫質上限：2K (1440p)</option>
+          <option value="hd1080">自動畫質上限：Full HD (1080p)</option>
+          <option value="hd720">自動畫質上限：HD (720p)</option>
+        </select>
+        <p class="section-hint">依「播放器寬度 × 螢幕像素密度」推算需要的畫質。只有在影片本身沒有更高畫質時，才會超過原生解析度放大來填滿畫面。設為「自動」以外的預設優先畫質時，一律以你指定的為準。</p>
+      </section>
+
+      <!-- Pop-up Player Placement -->
+      <section class="section" aria-labelledby="popup-target-label">
+        <label class="section-label" id="popup-target-label">彈出播放器開啟位置</label>
+        <select id="popupTargetDisplay-select" class="select-input" aria-labelledby="popup-target-label">
+          <option value="follow">跟隨目前視窗所在的螢幕</option>
+          <option value="largest">一律開在最大的螢幕</option>
+          <option value="internal">一律開在內建螢幕</option>
+        </select>
       </section>
 
       <!-- Extra Toggles -->

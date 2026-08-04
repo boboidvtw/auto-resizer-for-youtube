@@ -80,6 +80,9 @@ const PROBE = `(() => {
     popupButton: !!document.getElementById('yt-resizer-popup-btn'),
     scripts: ['injected','pageScript'].map(n => !!document.getElementById('yt-auto-resizer-' + n + '-flag')),
     isPopupWindow: document.documentElement.hasAttribute('yar-popup'),
+    dpr: window.devicePixelRatio,
+    screen: { w: screen.width, h: screen.height, aw: screen.availWidth, ah: screen.availHeight },
+    availableQualities: (() => { const p = document.getElementById('movie_player'); try { return p && p.getAvailableQualityLevels ? p.getAvailableQualityLevels() : []; } catch (e) { return []; } })(),
     viewport: { w: window.innerWidth, h: window.innerHeight },
     outer: { w: window.outerWidth, h: window.outerHeight },
     chromeSize: { w: window.outerWidth - window.innerWidth, h: window.outerHeight - window.innerHeight },
@@ -95,13 +98,22 @@ const check = (name, pass, detail) => {
 };
 
 /** 從真實的設定面板寫入設定，順便覆蓋 popup -> storage -> content script 這條鏈路 */
-const SETTINGS = (mode) => JSON.stringify({
+const SETTINGS = (mode, overrides) => JSON.stringify(Object.assign({
   enabled: true,
   resizeMode: mode,
   preferredQuality: 'auto',
   removeSideGaps: true,
-  resizeMainWindow: false
-});
+  resizeMainWindow: false,
+  displayAwareQuality: true,
+  autoQualityCeiling: 'hd2160',
+  popupTargetDisplay: 'follow'
+}, overrides));
+
+/** 視窗寬度超過這個值就視為在高解析度螢幕上，改用嚴格門檻 */
+const UHD_VIEWPORT_WIDTH = 3000;
+/** 側欄原本的寬度；並排時被 flex-grow 拉超過這個倍數就是版面壞了 */
+const SIDEBAR_WIDTH = 400;
+const SIDEBAR_MAX_RATIO = 1.6;
 
 (async () => {
   // ---------- 1. 一般兩欄模式 ----------
@@ -144,8 +156,79 @@ const SETTINGS = (mode) => JSON.stringify({
     const wasted = auto.viewport.h - auto.moviePlayer.h;
     check('自動模式應吃滿視窗高度', wasted <= 140, `垂直剩餘 ${wasted}px / 視窗高 ${auto.viewport.h}px`);
     check('自動模式無橫向溢出', !auto.overflow, `scrollW=${auto.scrollW} viewport=${auto.viewport.w}`);
-    check('側欄放不下時已換行到下方', auto.secondary.w > auto.primary.w * 0.9,
-      `primary=${auto.primary.w} secondary=${auto.secondary.w}`);
+    /*
+     * 側欄只有兩種可接受的樣子：擠不下就換行並撐滿整列，擠得下就以原寬度並排。
+     * 早期只斷言「一定會換行」——那在 1600px 視窗上碰巧成立，但在 3840px 的螢幕上
+     * 播放器 3312 + 間距 24 + 側欄 400 = 3736 仍放得下，正確行為就是並排。
+     * 真正不能接受的是第三種：並排但被 flex-grow 拉成 1900px 寬。
+     */
+    const autoWrapped = auto.secondary.w > auto.primary.w * 0.9;
+    check('側欄要嘛換行撐滿、要嘛並排且未被拉寬',
+      autoWrapped || auto.secondary.w <= SIDEBAR_WIDTH * SIDEBAR_MAX_RATIO,
+      `primary=${auto.primary.w} secondary=${auto.secondary.w} 換行=${autoWrapped}`);
+
+    console.log(
+      `\n[螢幕] viewport ${auto.viewport.w}x${auto.viewport.h} @${auto.dpr}x`
+      + ` | screen ${auto.screen.w}x${auto.screen.h} (avail ${auto.screen.aw}x${auto.screen.ah})`
+      + ` | 播放器實體像素 ${Math.round(auto.moviePlayer.w * auto.dpr)}`
+      + ` | 畫質 ${auto.quality} | 可用 ${(auto.availableQualities || []).join(',') || '未知'}\n`
+    );
+
+    // ---------- 1b. 高解析度螢幕專屬門檻 ----------
+    const isUhd = auto.viewport.w >= UHD_VIEWPORT_WIDTH;
+    if (isUhd) {
+      /*
+       * 這幾條是 v2.3.0 的存在理由。舊版在 3840px 寬的視窗上播 1080p 影片時，
+       * 播放器被畫質原生寬度鎖在 1920px（只用掉視窗的一半），右側剩下的 1900px
+       * 全被 flex-grow 的側欄吃光。同一份程式在 1710px 的內建螢幕上完全量不出來，
+       * 因為 1920 從來不是 binding constraint —— 這就是為什麼一定要在 4K 上跑一次。
+       */
+      const fill = auto.moviePlayer.w / auto.viewport.w;
+      check('[4K] 播放器須用掉視窗寬的 85% 以上', fill >= 0.85,
+        `player=${auto.moviePlayer.w} / viewport=${auto.viewport.w} = ${(fill * 100).toFixed(1)}%`);
+      check('[4K] 相對 YouTube 原生須放大 60% 以上', gain >= 1.6,
+        `原生 ${native.moviePlayer.w} -> 自動 ${auto.moviePlayer.w} (+${(gain * 100 - 100).toFixed(1)}%)`);
+
+      const wantedPhysical = auto.moviePlayer.w * auto.dpr;
+      check('[4K] 已依螢幕主動要到足夠畫質', ['hd2160', 'hd1440', 'highres'].includes(auto.quality),
+        `播放器實體 ${Math.round(wantedPhysical)}px，實得畫質 ${auto.quality}`);
+
+      /*
+       * 把畫質上限鎖回 1080p 並關掉螢幕感知，重現「播放器被 cap 在 1920px」的情境，
+       * 直接驗證 #columns 的寬度上限有沒有攔住側欄。這是唯一能證明那條 CSS 有作用的辦法：
+       * 開著螢幕感知時播放器會撐滿、側欄自然換行，反而繞過了要驗的東西。
+       */
+      const cappedSettings = SETTINGS('autoByQuality', {
+        displayAwareQuality: false,
+        preferredQuality: '1080p'
+      });
+      await panel.eval(`new Promise(r => chrome.storage.sync.set({ yt_auto_resizer_settings: ${cappedSettings} }, r))`);
+      /*
+       * 必須等夠久：YouTube 自己要花幾秒切到 1080p，content.js 又刻意讓「降畫質」
+       * 等 QUALITY_SHRINK_SETTLE_MS(4s) 穩定才縮版面（濾 ABR 抖動）。
+       * 只等 4 秒會量到還沒縮的狀態，斷言就會在情境根本沒重現的情況下通過。
+       */
+      await sleep(14000);
+      const capped = await main.eval(PROBE);
+
+      // 先確認情境真的重現了，否則下面那條「側欄沒被拉寬」只是在測未受限的版面
+      const cappedReproduced = capped.quality === 'hd1080' && capped.primary.w <= 2000;
+      check('[4K] 已重現「播放器被畫質原生寬鎖住」的情境', cappedReproduced,
+        `quality=${capped.quality} player=${capped.primary.w}（預期 hd1080 / <=2000）`);
+
+      const sidebarWrapped = capped.secondary.w > capped.primary.w * 0.9;
+      check('[4K] 畫質受限時側欄不被 flex-grow 拉寬',
+        cappedReproduced && !sidebarWrapped && capped.secondary.w <= SIDEBAR_WIDTH * SIDEBAR_MAX_RATIO,
+        `player=${capped.primary.w} secondary=${capped.secondary.w}`
+        + ` (上限 ${SIDEBAR_WIDTH * SIDEBAR_MAX_RATIO}, 換行=${sidebarWrapped}, 情境重現=${cappedReproduced})`);
+      check('[4K] 畫質受限時仍無橫向溢出', !capped.overflow,
+        `scrollW=${capped.scrollW} viewport=${capped.viewport.w}`);
+
+      await panel.eval(`new Promise(r => chrome.storage.sync.set({ yt_auto_resizer_settings: ${SETTINGS('autoByQuality')} }, r))`);
+      await sleep(4000);
+    } else {
+      console.log('[略過] 目前不在高解析度螢幕上，4K 專屬門檻未執行（用 SCREEN=uhd bash tests/run-e2e.sh 跑）\n');
+    }
   }
 
   let p = await main.eval(PROBE);
@@ -190,11 +273,39 @@ const SETTINGS = (mode) => JSON.stringify({
    */
   const swTarget = (await targets()).find((x) => x.url === `chrome-extension://${EXT_ID}/background.js`);
   check('Service worker 已註冊', !!swTarget, swTarget ? swTarget.url : '找不到（可能已閒置回收）');
+  let sw = null;
+  let displayInfo = null;
   if (swTarget) {
-    const sw = await Sess.open(swTarget.webSocketDebuggerUrl);
+    sw = await Sess.open(swTarget.webSocketDebuggerUrl);
     const swOk = await sw.eval(`typeof yarBuildPopupUrl === 'function' && typeof yarFitWindowSize === 'function'`);
     check('Service worker 載入共用設定成功', swOk);
+
+    // display.js 是 v2.3.0 新加的 importScripts；漏掉的話視窗定位會在執行時炸 ReferenceError
+    const displayOk = await sw.eval(`typeof yarPickTargetDisplay === 'function' && typeof yarFitIntoWorkArea === 'function'`);
+    check('Service worker 載入 display.js 成功', displayOk);
+
+    displayInfo = await sw.eval(`new Promise(r => chrome.system.display.getInfo(d => r(d.map(x => ({ id: x.id, bounds: x.bounds, workArea: x.workArea, internal: x.isInternal, primary: x.isPrimary })))))`);
+    check('chrome.system.display 可用且看得到所有螢幕', Array.isArray(displayInfo) && displayInfo.length > 0,
+      JSON.stringify(displayInfo));
+    console.log(`[真實螢幕] ${JSON.stringify(displayInfo)}\n`);
   }
+
+  /*
+   * 視窗落在哪台螢幕，一律問 service worker 而非頁面。
+   * 實測 Brave 的指紋防護會竄改頁面端的 screen.* 與 screenX/Y（同一時刻：YouTube 頁面看到
+   * screen 1680x1050 / screenX 8，chrome.system.display 卻是 1710x1107 與 3840x2160 @1710）。
+   * 拿被竄改的數字做斷言會得到看不懂的假失敗。
+   */
+  const displayOf = (win) => {
+    if (!displayInfo || !win || !Number.isFinite(win.left)) return null;
+    const cx = win.left + win.width / 2;
+    const cy = win.top + win.height / 2;
+    return displayInfo.find((d) => cx >= d.bounds.left && cx < d.bounds.left + d.bounds.width
+      && cy >= d.bounds.top && cy < d.bounds.top + d.bounds.height) || null;
+  };
+  const allWindows = sw
+    ? await sw.eval(`new Promise(r => chrome.windows.getAll({}, ws => r(ws.map(w => ({ id: w.id, type: w.type, left: w.left, top: w.top, width: w.width, height: w.height })))))`)
+    : [];
 
   if (popupTarget) {
     const pop = await Sess.open(popupTarget.webSocketDebuggerUrl);
@@ -227,7 +338,30 @@ const SETTINGS = (mode) => JSON.stringify({
     const contentRatio = pp.viewport.w / pp.viewport.h;
     check('彈出視窗內容區符合影片長寬比', Math.abs(contentRatio - nativeRatio) < 0.03,
       `content=${contentRatio.toFixed(3)} 基準=${nativeRatio.toFixed(3)} (${loaded ? pp.videoNative : '影片未自動播放，用 16:9 退路'}) chrome=${pp.chromeSize.w}x${pp.chromeSize.h}`);
-    check('彈出視窗未超出螢幕', pp.outer.h <= 1200 && pp.outer.w <= 2000, `outer=${pp.outer.w}x${pp.outer.h}`);
+    /*
+     * 原本寫死 2000x1200 的上限在 4K 上會誤判成失敗。改用 service worker 提供的真實螢幕
+     * 工作區來判斷，順便驗證多螢幕定位：popupTargetDisplay 預設 follow，
+     * 彈出視窗應該和來源視窗落在同一台螢幕上。
+     */
+    if (sw && displayInfo) {
+      const after = await sw.eval(`new Promise(r => chrome.windows.getAll({}, ws => r(ws.map(w => ({ id: w.id, type: w.type, left: w.left, top: w.top, width: w.width, height: w.height })))))`);
+      const popupWin = after.find((w) => w.type === 'popup');
+      const sourceWin = allWindows.find((w) => w.type === 'normal') || allWindows[0];
+      const popupDisplay = displayOf(popupWin);
+      const sourceDisplay = displayOf(sourceWin);
+
+      check('彈出視窗未超出所在螢幕的工作區',
+        !!popupDisplay
+        && popupWin.width <= popupDisplay.workArea.width + 4
+        && popupWin.height <= popupDisplay.workArea.height + 4,
+        popupWin
+          ? `視窗 ${popupWin.width}x${popupWin.height}@${popupWin.left},${popupWin.top} 工作區 ${popupDisplay ? popupDisplay.workArea.width + 'x' + popupDisplay.workArea.height : '未落在任何螢幕'}`
+          : '找不到彈出視窗');
+
+      check('彈出視窗開在來源視窗所在的螢幕 (follow)',
+        !!popupDisplay && !!sourceDisplay && popupDisplay.id === sourceDisplay.id,
+        `彈出=${popupDisplay ? popupDisplay.id : '?'} 來源=${sourceDisplay ? sourceDisplay.id : '?'}`);
+    }
 
     results.__popupDetail = pp;
     await pop.send('Runtime.evaluate', { expression: 'window.close()' }).catch(() => {});

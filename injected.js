@@ -57,6 +57,21 @@
     }
   }
 
+  /**
+   * 這支影片實際提供哪些畫質。
+   * 隔離世界需要它才能判斷「已經是最高畫質卻仍填不滿螢幕」——那是允許放大的唯一條件。
+   * 播放器尚未就緒時回傳空陣列，隔離世界會保守處理（不放大）。
+   */
+  function readAvailableQualities(player) {
+    if (!player || typeof player.getAvailableQualityLevels !== 'function') return [];
+    try {
+      const levels = player.getAvailableQualityLevels();
+      return Array.isArray(levels) ? levels.filter((q) => typeof q === 'string' && q !== 'auto') : [];
+    } catch (err) {
+      return [];
+    }
+  }
+
   function checkQualityAndSize() {
     if (!isWatchPage()) return;
 
@@ -78,14 +93,24 @@
     }
     if (!quality) return;
 
-    const signature = `${quality}_${videoWidth}x${videoHeight}`;
+    const availableQualities = readAvailableQualities(player);
+
+    // 可用畫質清單常常比第一次回報晚幾秒才就緒，必須納入去重簽章，
+    // 否則隔離世界會永遠停在「清單是空的 → 保守不放大」的狀態。
+    const signature = `${quality}_${videoWidth}x${videoHeight}_${availableQualities.join()}`;
     if (signature === lastSignature) return;
     lastSignature = signature;
 
     document.dispatchEvent(
       new CustomEvent(EVENT_NAME, {
         bubbles: true,
-        detail: { quality, videoWidth, videoHeight, videoId: readVideoId(player) }
+        detail: {
+          quality,
+          videoWidth,
+          videoHeight,
+          videoId: readVideoId(player),
+          availableQualities
+        }
       })
     );
   }

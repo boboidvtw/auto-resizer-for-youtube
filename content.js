@@ -23,6 +23,8 @@
    * autoByQuality 模式下播放器會在開播前十秒連跳好幾次尺寸。
    */
   const QUALITY_SHRINK_SETTLE_MS = 4000;
+  /** 視窗縮放／換螢幕後等它停下來再重算畫質，避免拖曳過程中連續送出請求 */
+  const DISPLAY_SETTLE_MS = 500;
 
   let settings = yarNormalizeSettings(null);
   /** 版面實際採用的畫質（升畫質立即跟進，降畫質需先穩定） */
@@ -33,7 +35,12 @@
   let lastVideoId = null;
   let lastVideoW = 0;
   let lastVideoH = 0;
-  let qualityLockedFor = null;
+  /** 這支影片實際提供的畫質清單（主世界回報）；空陣列代表尚未就緒 */
+  let availableQualities = [];
+  /** 已送出的畫質請求簽章 `${videoId}_${畫質}`，避免對同一目標反覆下指令 */
+  let qualityRequestSignature = '';
+  let displayQuery = null;
+  let displaySettleTimer = null;
   let popupPlayerWindow = false;
   let lastRequestedOuter = null;
   /** 系統對視窗高度的限制（選單列 / Dock）不會消失，一旦偵測到就永久記住 */
@@ -104,6 +111,59 @@
     });
   }
 
+  // ------------------------------------------------------- 螢幕感知（多螢幕）
+
+  /*
+   * 為什麼 DPR 要從這裡拿而不是從 chrome.system.display：
+   * macOS 上該 API 的 dpiX/dpiY 實測恆為 0（2026-08-04 雙螢幕實測），只提供邏輯座標。
+   * 唯一拿得到 DPR 的地方就是 content script 自己，而且只涵蓋視窗目前所在那一台螢幕 ——
+   * 這正好就是我們要的：畫質該多高，取決於使用者現在正在看的那台。
+   */
+
+  /**
+   * 這台螢幕能讓播放器長到多大（CSS px）。
+   * 刻意帶 allowUpscale=true：問的是「螢幕的容量」，不該被目前畫質的原生寬度反過來限制，
+   * 否則會變成「因為現在是 1080p，所以只需要 1080p」的自我實現迴圈。
+   */
+  function displayCeilingWidth() {
+    return yarPlayerWidthFor(
+      settings,
+      lastQuality || 'hd1080',
+      window.innerWidth,
+      window.innerHeight,
+      { allowUpscale: true }
+    );
+  }
+
+  /** 依螢幕實體像素（CSS 寬 × DPR）算出應該要的畫質；未啟用時回傳 null */
+  function desiredQualityForDisplay() {
+    if (!settings.enabled || !settings.displayAwareQuality) return null;
+    if (settings.resizeMode === 'default' || isPopupPlayerWindow()) return null;
+    const ceiling = displayCeilingWidth();
+    if (!ceiling) return null;
+    return yarQualityForPlayer(ceiling, window.devicePixelRatio, settings.autoQualityCeiling);
+  }
+
+  /**
+   * 判斷「影片最高能給到哪」時可用的清單。
+   * 使用者手動指定畫質時，那個畫質就是實質上限 —— 此時若螢幕還有餘裕，
+   * 放大是唯一能填滿畫面的辦法（使用者選的策略是「畫質優先、不夠才放大」）。
+   */
+  function effectiveAvailableQualities() {
+    if (settings.preferredQuality !== 'auto') {
+      const pinned = YAR_QUALITY_ALIAS[settings.preferredQuality];
+      return pinned && pinned !== 'auto' ? [pinned] : availableQualities;
+    }
+    return availableQualities;
+  }
+
+  /** 版面情境：只有「已是影片最高畫質仍填不滿螢幕」時才允許超過原生解析度放大 */
+  function layoutContext() {
+    return {
+      allowUpscale: yarShouldUpscale(desiredQualityForDisplay(), effectiveAvailableQualities())
+    };
+  }
+
   function applyPlayerLayout() {
     if (!isWatchPage()) {
       clearStyle();
@@ -114,7 +174,7 @@
       getStyleElement().textContent = yarBuildPopupPlayerCss();
       return;
     }
-    const css = yarBuildPlayerCss(settings, lastQuality || 'hd1080');
+    const css = yarBuildPlayerCss(settings, lastQuality || 'hd1080', layoutContext());
     getStyleElement().textContent = css;
     yarLog('已套用版面', settings.resizeMode, lastQuality, css ? '' : '(已清空)');
   }
@@ -123,10 +183,10 @@
 
   function adoptSettings(next) {
     settings = yarNormalizeSettings(next);
-    qualityLockedFor = null;   // 設定變更後允許重新鎖定畫質
+    qualityRequestSignature = '';   // 設定變更後允許重新請求畫質
     lastSentWindowSize = '';
     applyPlayerLayout();
-    pushPreferredQuality();
+    pushDesiredQuality();
     requestMainWorldState();
   }
 
@@ -171,20 +231,94 @@
 
   // ---------------------------------------------------------------- 畫質鎖定
 
-  function pushPreferredQuality() {
-    if (!settings.enabled || settings.preferredQuality === 'auto') return;
-    if (!isWatchPage() || !lastVideoId || qualityLockedFor === lastVideoId) return;
-    qualityLockedFor = lastVideoId;
+  /**
+   * 送出畫質請求。使用者明確指定的畫質永遠優先；設為「自動」時才由螢幕決定。
+   *
+   * 去重簽章用 `videoId + 目標畫質` 而非只用 videoId：
+   * - 同一支影片、同一個目標 → 只送一次，不會和使用者在 YouTube 選單裡的手動選擇互相拉扯
+   * - 視窗移到另一台螢幕或縮放後目標改變 → 簽章跟著變，會重新請求（這正是多螢幕要的行為）
+   */
+  function pushDesiredQuality() {
+    if (!settings.enabled || !isWatchPage() || !lastVideoId) return;
+
+    let target = null;
+    if (settings.preferredQuality !== 'auto') {
+      target = settings.preferredQuality;
+    } else {
+      const code = desiredQualityForDisplay();
+      target = code ? yarQualityAliasFor(code) : null;
+    }
+    if (!target) return;
+
+    const signature = `${lastVideoId}_${target}`;
+    if (signature === qualityRequestSignature) return;
+    qualityRequestSignature = signature;
+
     window.postMessage(
       {
         type: YAR_CHANNEL.ACTION,
         action: YAR_CHANNEL.SET_QUALITY,
-        payload: { quality: settings.preferredQuality }
+        payload: { quality: target }
       },
       window.location.origin
     );
-    yarLog('要求鎖定畫質', settings.preferredQuality);
+    yarLog('要求畫質', target, `(螢幕 ${window.innerWidth}x${window.innerHeight} @${window.devicePixelRatio}x)`);
   }
+
+  /**
+   * 視窗換螢幕或縮放後重新評估。
+   *
+   * 版面本身不需要這個（CSS 的 100vw/100vh 會自己跟上），但兩件事需要：
+   * ① 畫質請求 —— 從 1710px 邏輯寬的內建螢幕移到 3840px 的 4K 上，該要的畫質不一樣
+   * ② allowUpscale —— 螢幕容量改變會讓「影片畫質夠不夠」的答案翻轉
+   *
+   * 刻意不在這裡呼叫 syncBrowserWindow()：那會在使用者手動縮放視窗時反過來改動視窗尺寸。
+   */
+  function handleDisplayChange() {
+    watchDisplayChange();
+    applyPlayerLayout();
+
+    /*
+     * v2.3.0 讓畫質取決於視窗尺寸，而「同步調整瀏覽器視窗」又讓視窗尺寸取決於畫質 ——
+     * 兩者相接就是一個閉環：改視窗 -> 換畫質 -> 又改視窗。單靠 lastSentWindowSize 去重擋不住，
+     * 它只記得上一次，兩狀態來回震盪的簽章每次都不同（同一類問題見彈出視窗校正的震盪紀錄）。
+     * 剛送出過視窗調整就先不重算畫質，等視窗安定下來、不再有 resize 事件為止。
+     */
+    if (settings.resizeMainWindow
+      && Date.now() - lastWindowResizeAt < YAR_WINDOW_RESIZE_COOLDOWN_MS * 2) {
+      return;
+    }
+    pushDesiredQuality();
+  }
+
+  /**
+   * 監看 DPR 變化。移到不同縮放倍率的螢幕時（本機實測：內建 @2x → 4K @1x）
+   * matchMedia 會觸發，但條件字串必須用當下的 dppx 重新綁定，否則只會觸發一次。
+   */
+  function watchDisplayChange() {
+    if (typeof window.matchMedia !== 'function') return;
+    if (displayQuery && typeof displayQuery.removeEventListener === 'function') {
+      displayQuery.removeEventListener('change', handleDisplayChange);
+    }
+    try {
+      displayQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+      if (typeof displayQuery.addEventListener === 'function') {
+        displayQuery.addEventListener('change', handleDisplayChange);
+      }
+    } catch (err) {
+      displayQuery = null;   // 條件字串不受支援時就只靠 resize 事件
+    }
+  }
+
+  window.addEventListener('resize', () => {
+    if (displaySettleTimer) clearTimeout(displaySettleTimer);
+    displaySettleTimer = setTimeout(() => {
+      displaySettleTimer = null;
+      handleDisplayChange();
+    }, DISPLAY_SETTLE_MS);
+  });
+
+  watchDisplayChange();
 
   // ------------------------------------------------------- 瀏覽器視窗同步
 
@@ -209,11 +343,18 @@
   }
 
   /**
-   * 依目前畫質算出視窗該有的尺寸。
-   * 這裡用 screen.avail* 是正確的：目標是實體螢幕上的「瀏覽器視窗」，
-   * 而非頁面版面（版面用的是 CSS 的 100vw/100vh）。
+   * 組出「視窗尺寸請求」交給 service worker 去算。
+   *
+   * 這裡刻意**不**碰 `window.screen.avail*`。實測（2026-08-04，Brave，同一實例同一時刻）：
+   *   YouTube 頁面          screen 1680x1050、screenX 8   ← 被指紋防護竄改
+   *   擴充功能 service worker  chrome.system.display 1710x1107 與 3840x2160  ← 真值
+   * 也就是說頁面端量到的螢幕尺寸是假的。在單螢幕上誤差還小，但要替 3840x2160 的外接
+   * 螢幕算視窗時，用被竄改成 1680 的數字會算出一個小一半的視窗。
+   * 真正知道螢幕的是 service worker，因此由它負責夾擠與定位，這裡只提供內容需求。
+   *
+   * @returns {{playerWidth:number, extraWidth:number, extraHeight:number, aspectRatio:number}}
    */
-  function windowSizeForQuality(isPopup) {
+  function windowFitRequest(isPopup) {
     const playerWidth = YAR_QUALITY_WIDTH[lastQuality] || YAR_QUALITY_WIDTH.hd1080;
     // 實測值只在「要調整的視窗就是自己」時才適用。主視窗替尚未存在的彈出視窗算尺寸時，
     // 量到的是主視窗的分頁列與網址列，套用在彈出視窗上會整個算錯，只能先用估計值，
@@ -227,18 +368,12 @@
       ? YAR_LAYOUT.POPUP_CHROME_HEIGHT
       : YAR_LAYOUT.MASTHEAD_HEIGHT + YAR_LAYOUT.WINDOW_CHROME_HEIGHT;
 
-    const extraWidth = contentExtraWidth + (measured ? measured.width : 0);
-    const extraHeight = measured ? measured.height : fallbackChromeHeight;
-
-    const screenInfo = window.screen || {};
-    return yarFitWindowSize(
+    return {
       playerWidth,
-      extraWidth,
-      extraHeight,
-      screenInfo.availWidth || playerWidth + extraWidth,
-      screenInfo.availHeight || Math.round(playerWidth / currentAspectRatio()) + extraHeight,
-      currentAspectRatio()
-    );
+      extraWidth: contentExtraWidth + (measured ? measured.width : 0),
+      extraHeight: measured ? measured.height : fallbackChromeHeight,
+      aspectRatio: currentAspectRatio()
+    };
   }
 
   /**
@@ -252,8 +387,9 @@
     if (!settings.resizeMainWindow || !settings.enabled) return;
     if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) return;
 
-    const size = windowSizeForQuality(false);
-    const signature = `${size.width}x${size.height}`;
+    const fit = windowFitRequest(false);
+    // 最終尺寸由 service worker 依真實螢幕算出，因此改用「請求內容」做去重簽章
+    const signature = `${fit.playerWidth}_${fit.extraWidth}_${fit.extraHeight}_${fit.aspectRatio.toFixed(3)}`;
     if (signature === lastSentWindowSize) return;
 
     const now = Date.now();
@@ -262,7 +398,7 @@
     lastSentWindowSize = signature;
     lastWindowResizeAt = now;
     chrome.runtime.sendMessage(
-      Object.assign({ action: YAR_MSG.RESIZE_WINDOW }, size),
+      { action: YAR_MSG.RESIZE_WINDOW, fit },
       () => void chrome.runtime.lastError
     );
     yarLog('要求調整視窗尺寸', lastQuality, signature);
@@ -377,23 +513,32 @@
 
     if (detail.videoId && detail.videoId !== lastVideoId) {
       lastVideoId = detail.videoId;
-      qualityLockedFor = null;
       lastSentWindowSize = '';
       popupCalibrations = 0;
       popupCalibrationScheduled = false;
       lastQuality = null;   // 換影片就重新開始比較，否則上一支的高畫質會鎖住新影片的尺寸
+      availableQualities = [];   // 上一支影片的可用畫質不適用於新影片
     }
+
+    /*
+     * 可用畫質清單通常比第一次畫質回報晚幾秒才就緒，而它一旦到手就可能讓 allowUpscale 翻轉
+     * （例如發現這支影片最高只有 1080p），因此清單本身的變化也要觸發重新套用版面。
+     */
+    const nextAvailable = Array.isArray(detail.availableQualities) ? detail.availableQualities : [];
+    const availableChanged = nextAvailable.join() !== availableQualities.join();
+    if (availableChanged) availableQualities = nextAvailable;
+
     const layoutChanged = adoptQuality(detail.quality);
     if (detail.videoWidth > 0 && detail.videoHeight > 0) {
       lastVideoW = detail.videoWidth;
       lastVideoH = detail.videoHeight;
     }
 
-    if (layoutChanged) {
+    if (layoutChanged || availableChanged) {
       applyPlayerLayout();
-      syncBrowserWindow();
+      if (layoutChanged) syncBrowserWindow();
     }
-    pushPreferredQuality();
+    pushDesiredQuality();
     scheduleWindowCalibration();
   }
 
@@ -413,6 +558,8 @@
       lastQuality = null;
       reportedQuality = null;
       lastVideoId = null;
+      availableQualities = [];
+      qualityRequestSignature = '';
       return;
     }
     applyPlayerLayout();
@@ -437,14 +584,12 @@
     if (video) video.pause();
 
     chrome.runtime.sendMessage(
-      Object.assign(
-        {
-          action: YAR_MSG.OPEN_POPUP_PLAYER,
-          videoId,
-          startTime: video ? Math.floor(video.currentTime) : 0
-        },
-        windowSizeForQuality(true)
-      ),
+      {
+        action: YAR_MSG.OPEN_POPUP_PLAYER,
+        videoId,
+        startTime: video ? Math.floor(video.currentTime) : 0,
+        fit: windowFitRequest(true)
+      },
       () => void chrome.runtime.lastError
     );
   }

@@ -42,11 +42,18 @@ function yarColumnGap(removeSideGaps) {
  * 剩餘空間不足以放下側欄時，由 #columns 的 flex-wrap 自動把側欄換到播放器下方
  * （見 yarColumnsCss）。因此這條運算式只需扣掉頁面內距與捲軸。
  *
+ * 畫質原生寬度這個上限，在高解析度螢幕上會反過來變成主要限制：3840px 寬的視窗播 1080p
+ * 影片時，播放器被鎖在 1920px，只用掉視窗的一半，右側還會被 flex-grow 的側欄吃掉。
+ * 同一段程式在 1710px 邏輯寬的內建螢幕上永遠量不到這件事（1920 從來不是 binding constraint）。
+ * 因此當影片本身已經給不出更高畫質時（allowUpscale），就拿掉這個上限改為填滿視窗。
+ *
  * @param {{resizeMode: string, removeSideGaps: boolean}} settings
  * @param {string} quality YouTube 內部畫質代碼，例如 hd2160
+ * @param {{allowUpscale?: boolean}} [context] 版面情境；allowUpscale 由 content.js 依
+ *        yarShouldUpscale() 判定，代表「已是這支影片的最高畫質仍不夠填滿螢幕」
  * @returns {string} 可直接指派給 custom property 的 CSS 值
  */
-function yarBuildWidthExpression(settings, quality) {
+function yarBuildWidthExpression(settings, quality, context) {
   const reserveW = yarReservePageWidth(settings.removeSideGaps);
   const reserveH = YAR_LAYOUT.MASTHEAD_HEIGHT + YAR_LAYOUT.VERTICAL_MARGIN;
 
@@ -54,12 +61,46 @@ function yarBuildWidthExpression(settings, quality) {
   const byViewportHeight = `calc((100vh - ${reserveH}px) * 16 / 9)`;
 
   const caps = [byViewportWidth, byViewportHeight];
-  if (settings.resizeMode === 'autoByQuality') {
+  const allowUpscale = !!(context && context.allowUpscale);
+  if (settings.resizeMode === 'autoByQuality' && !allowUpscale) {
     const nativeWidth = YAR_QUALITY_WIDTH[quality];
     if (nativeWidth) caps.unshift(`${nativeWidth}px`);
   }
 
   return `max(${YAR_LAYOUT.MIN_PLAYER_WIDTH}px, min(${caps.join(', ')}))`;
+}
+
+/**
+ * yarBuildWidthExpression 的數值孿生：在已知 viewport 下直接算出播放器寬度。
+ *
+ * 為什麼需要它：版面本身用 CSS min() 就夠了（瀏覽器會自己重算），但 content.js 必須在 JS 裡
+ * 回答「這台螢幕能讓播放器長到多大」才有辦法反推該向 YouTube 要什麼畫質。
+ * 這份重複是刻意的，並由 unit.test.js 的防漂移測試守住：同一組輸入下，
+ * 本函式的結果必須與 CSS 運算式求值完全相等。
+ *
+ * @param {{resizeMode: string, removeSideGaps: boolean}} settings
+ * @param {string} quality YouTube 內部畫質代碼
+ * @param {number} viewportWidth window.innerWidth
+ * @param {number} viewportHeight window.innerHeight
+ * @param {{allowUpscale?: boolean}} [context]
+ * @returns {number|null} viewport 無效時回傳 null
+ */
+function yarPlayerWidthFor(settings, quality, viewportWidth, viewportHeight, context) {
+  const vw = Number.isFinite(viewportWidth) && viewportWidth > 0 ? viewportWidth : null;
+  const vh = Number.isFinite(viewportHeight) && viewportHeight > 0 ? viewportHeight : null;
+  if (!vw || !vh) return null;
+
+  const reserveW = yarReservePageWidth(settings.removeSideGaps);
+  const reserveH = YAR_LAYOUT.MASTHEAD_HEIGHT + YAR_LAYOUT.VERTICAL_MARGIN;
+
+  const caps = [vw - reserveW, ((vh - reserveH) * 16) / 9];
+  const allowUpscale = !!(context && context.allowUpscale);
+  if (settings.resizeMode === 'autoByQuality' && !allowUpscale) {
+    const nativeWidth = YAR_QUALITY_WIDTH[quality];
+    if (nativeWidth) caps.push(nativeWidth);
+  }
+
+  return Math.max(YAR_LAYOUT.MIN_PLAYER_WIDTH, Math.min.apply(null, caps));
 }
 
 /**
@@ -101,12 +142,19 @@ function yarColumnsCss(removeSideGaps) {
        * min-width（實測播放器 1392px 時算出 1760px），播放器一放大就會把整頁撐出橫向捲軸，
        * 側欄也因此永遠無法換行 —— min-width 撐著，flex 容器根本不會覺得空間不夠。
        */
+      /*
+       * 總寬上限 = 播放器 + 剛好一個側欄 + 欄間距。
+       * 沒有這個上限時，4K 螢幕上會出現：播放器 1920px、視窗 3840px，剩下的 1900px
+       * 全被側欄的 flex-grow 吃光（flex-basis 400px），推薦影片卡片被拉成 1900px 寬。
+       * 有了上限，多餘空間會變成左右置中的留白（故 margin 需為 auto 而非 0）。
+       * 上限超過視窗寬時由 min(100%, …) 夾住，側欄照樣正常換行。
+       */
       ${scope} #columns.ytd-watch-flexy {
-        max-width: none !important;
+        max-width: min(100%, calc(var(--yar-player-w) + ${YAR_LAYOUT.SIDEBAR_WIDTH}px + ${gap}px)) !important;
         width: 100% !important;
         min-width: 0 !important;
-        margin-left: 0 !important;
-        margin-right: 0 !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
         display: flex !important;
         flex-flow: row wrap !important;
         /* 側欄換到下方後，播放器若靠左會在右邊留一條空白；置中才不會看起來歪一邊 */
@@ -260,13 +308,14 @@ function yarBuildPopupPlayerCss() {
  * 產生完整的動態樣式表內容。
  * @param {object} settings 已正規化的設定
  * @param {string} quality YouTube 內部畫質代碼
+ * @param {{allowUpscale?: boolean}} [context] 版面情境，見 yarBuildWidthExpression
  * @returns {string} CSS；resizeMode 為 'default' 或未啟用時回傳空字串
  */
-function yarBuildPlayerCss(settings, quality) {
+function yarBuildPlayerCss(settings, quality, context) {
   if (!settings.enabled || settings.resizeMode === 'default') return '';
 
   const isTheater = settings.resizeMode === 'theater';
-  const playerWidth = yarBuildWidthExpression(settings, quality);
+  const playerWidth = yarBuildWidthExpression(settings, quality, context);
 
   /*
    * 欄位版面一律接管。曾經只在 removeSideGaps 開啟時才套，但播放器寬度變數

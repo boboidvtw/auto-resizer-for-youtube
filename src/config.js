@@ -91,14 +91,41 @@ const YAR_QUALITY_ALIAS = {
   auto: 'auto'
 };
 
+/**
+ * 內部畫質代碼 → popup 標籤（YAR_QUALITY_ALIAS 的反查）。
+ * 依螢幕自動選出的畫質是內部代碼，但送給主世界的 SET_QUALITY 收的是標籤，需要這一步。
+ * 動態反查而非再維護一份對照表，避免兩份表漂移。
+ * @returns {string|null} 找不到時回傳 null
+ */
+function yarQualityAliasFor(code) {
+  const found = Object.keys(YAR_QUALITY_ALIAS).find((label) => YAR_QUALITY_ALIAS[label] === code);
+  return found || null;
+}
+
 const YAR_RESIZE_MODES = ['autoByQuality', 'fitWindow', 'theater', 'default'];
+
+/** 彈出式播放器要開在哪台螢幕 */
+const YAR_POPUP_TARGETS = {
+  FOLLOW: 'follow',       // 跟隨來源視窗所在的螢幕
+  INTERNAL: 'internal',   // 一律開在內建螢幕
+  LARGEST: 'largest'      // 一律開在面積最大的螢幕（多半就是外接 4K）
+};
+
+const YAR_POPUP_TARGET_VALUES = Object.keys(YAR_POPUP_TARGETS).map((key) => YAR_POPUP_TARGETS[key]);
 
 const YAR_DEFAULT_SETTINGS = {
   enabled: true,
   resizeMode: 'autoByQuality',
   preferredQuality: 'auto',   // 'auto' = 不干預 YouTube 自動畫質
   removeSideGaps: true,
-  resizeMainWindow: false     // 主動改動使用者瀏覽器視窗，預設關閉
+  resizeMainWindow: false,    // 主動改動使用者瀏覽器視窗，預設關閉
+  /*
+   * 依螢幕的實體像素（CSS 寬 × devicePixelRatio）主動要求畫質。
+   * 只在 preferredQuality === 'auto' 時生效——使用者明確指定畫質時一律以使用者為準。
+   */
+  displayAwareQuality: true,
+  autoQualityCeiling: 'hd2160',
+  popupTargetDisplay: 'follow'
 };
 
 /** 訊息 action 常數，避免字串散落 */
@@ -107,7 +134,9 @@ const YAR_MSG = {
   RESIZE_WINDOW: 'RESIZE_WINDOW',
   OPEN_POPUP_PLAYER: 'OPEN_POPUP_PLAYER',
   /** 問 service worker：這個分頁是不是它開出來的彈出式播放器 */
-  IS_POPUP_PLAYER: 'IS_POPUP_PLAYER'
+  IS_POPUP_PLAYER: 'IS_POPUP_PLAYER',
+  /** 取得顯示器清單（只有 service worker 拿得到 chrome.system.display） */
+  GET_DISPLAYS: 'GET_DISPLAYS'
 };
 
 /** service worker 記住自己開過哪些彈出播放器分頁（放 storage.session，撐過 SW 回收） */
@@ -160,7 +189,16 @@ function yarNormalizeSettings(raw) {
       : YAR_DEFAULT_SETTINGS.removeSideGaps,
     resizeMainWindow: typeof source.resizeMainWindow === 'boolean'
       ? source.resizeMainWindow
-      : YAR_DEFAULT_SETTINGS.resizeMainWindow
+      : YAR_DEFAULT_SETTINGS.resizeMainWindow,
+    displayAwareQuality: typeof source.displayAwareQuality === 'boolean'
+      ? source.displayAwareQuality
+      : YAR_DEFAULT_SETTINGS.displayAwareQuality,
+    autoQualityCeiling: Object.prototype.hasOwnProperty.call(YAR_QUALITY_WIDTH, source.autoQualityCeiling)
+      ? source.autoQualityCeiling
+      : YAR_DEFAULT_SETTINGS.autoQualityCeiling,
+    popupTargetDisplay: YAR_POPUP_TARGET_VALUES.includes(source.popupTargetDisplay)
+      ? source.popupTargetDisplay
+      : YAR_DEFAULT_SETTINGS.popupTargetDisplay
   };
 }
 

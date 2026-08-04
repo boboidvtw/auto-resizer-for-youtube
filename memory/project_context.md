@@ -1,6 +1,99 @@
 # Project Context & Handoff Log - YouTube Auto Resizer & Quality Controller
 
-> Last Closed: 2026-08-04T12:59:33+08:00 (v2.2.0, commit 377c813)
+> Last Closed: 2026-08-04 (v2.3.0，4K / 多螢幕適配)
+
+---
+
+## 🖥️ v2.3.0 — 4K 與多螢幕適配
+
+**本機組態（`chrome.system.display` 實測，2026-08-04）**
+
+```
+Display 1 內建 Color LCD   bounds 0,0     1710x1107  workArea top=34 高1073  isInternal isPrimary  DPR 2
+Display 2 Philips UHDTV    bounds 1710,0  3840x2160  workArea top=30 高2130  外接              DPR 1
+```
+
+兩台**並排、4K 在右**。實體面板是 2880x1864 與 3840x2160，但重要的是邏輯寬度差 2.25 倍
+（1710 vs 3840）而 DPR 反過來差一半。
+
+- [x] **`autoByQuality` 的畫質原生寬上限在 4K 上變成主要限制（根因）**。3840px 視窗播 1080p 時
+      播放器被鎖在 1920px。**同一段程式在內建螢幕上永遠量不出來**——1710px 的視窗裡
+      1920 從來不是 binding constraint。這就是「只有換螢幕才會現形」的 bug。
+      修法：`getAvailableQualityLevels()` 比對後，若影片本身已給不出更高畫質就拿掉上限。
+      實測 4K：原生 1840 → 自動 3312（+80.0%），用掉視窗寬的 86.3%。
+- [x] **依螢幕實體像素選畫質**：判準是「播放器 CSS 寬 × devicePixelRatio」。
+      內建 1392x2 = 2784、4K 3312x1 = 3312 —— CSS 寬差一倍，需要的畫質卻相同（都是 2160p）。
+      只看 CSS 寬會在 Retina 上長期要低了。新設定 `displayAwareQuality` / `autoQualityCeiling`。
+- [x] **側欄被 flex-grow 拉寬**：4K 上播放器 1920、剩 1900px 全被 `flex: 1 1 400px` 吃掉。
+      修法是限制 `#columns` 的 `max-width`（而非鎖 `#secondary` 的寬度——那會讓換行後撐不滿）。
+      實測受限情境下側欄 400px（原本會是 ~1900）。
+- [x] **彈出播放器可指定螢幕**（follow / largest / internal），依目標螢幕 workArea 算尺寸並置中。
+
+## ⚠️ v2.3.0 兩個一定會踩的環境陷阱
+
+1. **macOS 的 `chrome.system.display` 不提供 DPI**
+   `dpiX` / `dpiY` **恆為 0**，`name` **恆為空字串**。原本設計想用 `dpr = dpiX / 96` 來分級，
+   那會讓每台螢幕的實體寬度都算成 0。**DPR 只能從頁面端的 `window.devicePixelRatio` 拿，
+   而且只涵蓋視窗目前所在那一台。** 分級函式必須容許 DPR 未知（未知時退回邏輯寬度判斷）。
+   UI 標籤也不能用 `name`，要自己組（「內建 1710×1107 @2x」）。
+
+2. **Brave 的指紋防護會竄改網頁端的 `screen.*` 與 `screenX/Y`**
+   同一個 Brave 實例、同一時刻實測：
+
+   | 來源 | 看到的螢幕 |
+   |---|---|
+   | YouTube 頁面 | `screen` 1680×1050、`screenX` 8（實際位置是 0,40） |
+   | 擴充功能 service worker | `chrome.system.display` 1710×1107 與 3840×2160@1710 |
+
+   **`chrome.system.display` 不受影響。** 這不只是測試環境問題：`windowSizeForQuality()` 原本就是用
+   `screen.avail*` 算彈出視窗尺寸，在 Brave 上會拿 1680 去替 3840 的螢幕算，視窗小一半。
+   已把尺寸決定權整個移到 service worker（content script 只送「內容需求」`windowFitRequest`，
+   由 background 的 `yarSizeFromFitRequest` 用真實 workArea 夾擠）。
+   **推論：任何需要真實螢幕尺寸的邏輯都不能寫在 content script。**
+
+## 🧪 v2.3.0 的測試設計
+
+- **對照組門檻放在 e2e 而非單元測試**：`default` 模式回傳空字串，YouTube 原生寬度是外部事實，
+  在單元測試裡模型化它只會得到自我實現的假門檻。單元測試守的是「有沒有被 cap 鎖死 / 會不會溢出 /
+  內建螢幕有沒有退步」。
+- **CSS 運算式要求值成像素再斷言**。`evalWidthExpression()` 把 `max(426px, min(3840px, calc(100vw - 16px), …))`
+  在指定 viewport 下算成數字。斷言「CSS 裡有 100vw」在功能整個失效時照樣會過（v2.2.0 的教訓）。
+- **防漂移測試**：`yarPlayerWidthFor`（JS）與 CSS 運算式求值必須在 180 組組合下算出同一個數字。
+  這份重複是刻意的——content.js 需要在 JS 裡知道播放器能長多大才能反推畫質。
+- **假通過抓到一次**：`[4K] 畫質受限時側欄不被拉寬` 一開始只等 4 秒就量，量到的還是未受限狀態
+  （player 3312 而非 1920），斷言照樣通過。降畫質有 `QUALITY_SHRINK_SETTLE_MS`(4s) 的 settle，
+  必須等 14 秒，**並且加一條「情境是否真的重現」的前置斷言**，否則那條檢查什麼都沒守。
+
+## ✅ v2.3.0 實測結果
+
+| | 內建 1600x863 viewport @2x | 4K 3840x1943 viewport @1x |
+|---|---|---|
+| default（不介入） | 1112x626 | 1840x1035 |
+| autoByQuality | **1392x783（+25.2%）** | **3312x1863（+80.0%）** |
+| 播放器實體像素 | 2784 | 3312 |
+| 自動要到的畫質 | hd2160 | hd2160 |
+| 側欄 | 換行撐滿 1600 | 並排 400（未被拉寬） |
+| 畫質上限鎖 1080p 時 | — | 播放器 1920、側欄 **400**（修正前會是 ~1900） |
+| 彈出視窗 | 1554x906 @螢幕1 | 3735x2130 @螢幕2（follow 正確） |
+| 橫向溢出 | 無 | 無 |
+
+單元測試 58/58；e2e 內建 29/29、4K 35/35。
+
+**複審**（typescript-reviewer，2026-08-04）：Approve，無 CRITICAL / HIGH。三項 LOW 全數修正——
+① `onMessage` 裡 fire-and-forget 的 async handler 補 `.catch`（原本仰賴「每個下游都不 reject」的隱性約定，
+   下游一改就變成 service worker 裡沒有症狀的 unhandled rejection）；`GET_DISPLAYS` 出錯時仍回空清單，
+   否則 popup 的 callback 永遠等不到。
+② `dpr` 加上界 `YAR_MAX_DPR = 4`——它有一條來自訊息的路徑（popup 傳給 SW），
+   不夾的話一個離譜數字就能把任何螢幕推成 UHD 分級。只夾上界：縮小頁面時 dpr < 1 是合法的。
+③ `#popupTargetDisplay-select` 補 `aria-labelledby`。
+
+另在自行的安全通道檢視中修掉一個：`yarShouldUpscale` 讀的 `availableQualities` 來自主世界的
+YouTube player 物件（頁面可控），原本用 `YAR_QUALITY_WIDTH[code] || 0` 會沿原型鏈取到函式，
+`Math.max` 得到 NaN。實測 `['hd1080','__proto__']` 舊寫法回 `false`（永遠不放大），已改用 `hasOwnProperty`。
+
+跑法：`bash tests/run-e2e.sh`（內建）／`SCREEN=uhd bash tests/run-e2e.sh`（4K）。
+⚠️ `run-e2e.sh` 的 `uhd` 座標寫死 `1710,40`，**螢幕排列改變（左右對調、換解析度）就要重新量**
+（用 `chrome.system.display.getInfo()`）。
 
 ---
 
@@ -193,7 +286,10 @@
       另外 watch 頁的 `--yar-player-h` 仍寫死 9/16，直式影片會有大片上下黑邊（同 YouTube 原生行為）。
 - [ ] **側欄並排時會被拉寬**（240p 影片實測 1150px）。flex-grow 讓它撿走所有剩餘空間，
       推薦影片卡片會被拉長。要不要設上限待觀察。
-- [ ] **多螢幕情境未測**。`screen.avail*` 在副螢幕上的行為、視窗跨螢幕時的校正收斂。
+- [x] ~~**多螢幕情境未測**~~ **v2.3.0 已完成**（見上方 v2.3.0 段落）。
+      剩下未測的多螢幕子題：**把視窗從一台拖到另一台**時的即時反應。
+      已實作 `matchMedia('(resolution: Ndppx)')` 監看 + 500ms debounce 的 resize 重算，
+      但只在同一台螢幕上縮放驗過，沒有真的拖曳跨螢幕測過（CDP 不好模擬，需手動）。
 - [ ] 觀察 Chromium 更新後 YouTube Polymer 版面變化——
       `theater` / `full-bleed-player` 兩個屬性名仍是外部相依（`is-two-columns_` 已在 v2.2.0 拿掉）。
       YouTube 若改用別的變數算 `#columns` 的 min-width，換行邏輯也會失效。
