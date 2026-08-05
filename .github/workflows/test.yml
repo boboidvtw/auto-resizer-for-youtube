@@ -88,3 +88,27 @@ jobs:
             }
             process.exit(bad ? 1 : 0);
           '
+
+      - name: 商店素材尺寸必須符合規格
+        run: |
+          # 商店對素材尺寸零容忍，差一像素就退件，而錯誤尺寸從檔案總管看不出來。
+          node -e '
+            const fs = require("fs");
+            const spec = {
+              "store-assets/01-watch-page.png": [1280, 800],
+              "store-assets/02-settings-panel.png": [1280, 800],
+              "store-assets/promo-small-440x280.png": [440, 280]
+            };
+            let bad = 0;
+            for (const [file, [ew, eh]] of Object.entries(spec)) {
+              if (!fs.existsSync(file)) { console.error(`::error::缺少商店素材 ${file}`); bad++; continue; }
+              const buf = fs.readFileSync(file);
+              const w = buf.readUInt32BE(16), h = buf.readUInt32BE(20);
+              if (w !== ew || h !== eh) {
+                console.error(`::error::${file} 是 ${w}x${h}，商店要求 ${ew}x${eh}`); bad++;
+              } else {
+                console.log(`${file} ${w}x${h} 正確`);
+              }
+            }
+            process.exit(bad ? 1 : 0);
+          '

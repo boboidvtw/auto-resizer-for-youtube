@@ -123,6 +123,10 @@ youtube-auto-resizer-extension/
 少了這一關，樣式沒生效時產出的會是一組「YouTube 原生版面」的截圖，看起來很正常，
 但宣傳的是我們沒做到的事。
 
+**宣傳圖**：`bash tools/build-promo.sh` 由 `store-assets/promo-small.svg` 產生商店的
+440×280 small promo tile。三種素材的尺寸都有 CI 守門 —— 商店對尺寸零容忍，
+而錯誤尺寸從檔案總管看不出來。
+
 ---
 
 ## 🧪 測試 (Tests)
