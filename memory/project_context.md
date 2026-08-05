@@ -86,9 +86,14 @@ Chrome 工具列實際顯示的就是 16px —— 256 個像素撐不起四個�
 - [x] ~~贊助金流~~ 維持 PayPal（見上方「贊助金流」段落），無須註冊新帳號。
 - [x] ~~商店素材~~ 1280×800 截圖 ×2、440×280 宣傳圖、128×128 商店圖示皆已產生並進版控，
       前兩者尺寸有 CI 守門。
-- [ ] **`store-icon-128.png` 沒有產生腳本**，是唯一沒有向量單一來源保障的素材——
-      改 `icons/icon.svg` 不會連帶更新它。補進 `tools/build-promo.sh`（同一支 rsvg-convert
-      流程，渲染 96px 再置中貼到 128 畫布），並比照 440×280 加尺寸自我檢查與 CI 守門。
+- [x] ~~**`store-icon-128.png` 沒有產生腳本**~~ **2026-08-05 完成**。`tools/build-promo.sh`
+      現在用 `rsvg-convert --page-width/--page-height/--top/--left`（需 2.52+）由
+      `icons/icon.svg` 直接渲染成「96 內容置中於 128 畫布」，不需要第二個影像工具。
+      守門的重點是**留白而非尺寸**：忘了那幾個參數的輸出照樣是 128×128，只驗 IHDR 擋不住。
+      因此寫了 `tools/png-geometry.js`（零相依，node 內建 zlib 解 PNG、un-filter scanline
+      後量不透明像素的邊界框），build 腳本、CI、單元測試三處共用。
+      CI 另加一條**負向驗證**（滿版的 `icons/icon.png` 必須被擋下），
+      測試也拿它當對照組——否則檢查退化成「永遠通過」不會有人發現。
 - [ ] **送審**：上傳 `dist/auto-resizer-for-youtube-v3.0.0.zip`，填表照 `store-assets/store-listing.md`。
 - [ ] 上架後把商店連結補進 README、專案首頁與 `bobo-labs` 的 project card。
 

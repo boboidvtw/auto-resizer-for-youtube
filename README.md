@@ -102,8 +102,8 @@ youtube-auto-resizer-extension/
 ├── pageScript.js      # 主世界：透過原生 player API 設定畫質
 ├── popup.html/js/css  # 設定面板
 ├── tests/             # 零相依測試（node:test + node:vm）
-├── tools/             # 商店素材產生器（真實載入擴充功能後截圖）
-├── store-assets/      # 1280×800 商店截圖
+├── tools/             # 打包、商店素材產生器、PNG 幾何檢查
+├── store-assets/      # 商店截圖、宣傳圖、商店圖示
 └── icons/
     ├── icon.svg       # 單一向量來源
     └── build.sh       # 產生 16/32/48/128 PNG（需 rsvg-convert）
@@ -123,9 +123,18 @@ youtube-auto-resizer-extension/
 少了這一關，樣式沒生效時產出的會是一組「YouTube 原生版面」的截圖，看起來很正常，
 但宣傳的是我們沒做到的事。
 
-**宣傳圖**：`bash tools/build-promo.sh` 由 `store-assets/promo-small.svg` 產生商店的
-440×280 small promo tile。三種素材的尺寸都有 CI 守門 —— 商店對尺寸零容忍，
-而錯誤尺寸從檔案總管看不出來。
+**宣傳圖與商店圖示**：`bash tools/build-promo.sh` 產生兩張素材 —— 由
+`store-assets/promo-small.svg` 產生 440×280 的 small promo tile，並由 `icons/icon.svg`
+（與工具列圖示同一個向量來源）產生 128×128 的商店圖示。
+
+商店圖示與 manifest 的 `icons/icon.png` **不是同一張**：兩者都是 128×128，但商店要求
+圖形只佔中央 96×96、四周留 16px 透明邊。**這是只驗尺寸擋不住的一類錯誤** ——
+忘了留白參數的輸出照樣是 128×128，拿滿版的 `icons/icon.png` 去填也一樣。
+因此 `tools/png-geometry.js`（零相依，只用 node 內建 zlib 解 PNG）真的去量不透明像素的
+邊界框，build 腳本與 CI 都用它守門，CI 還額外反向確認滿版圖示必須被擋下 ——
+否則這條檢查哪天退化成「永遠通過」也不會有人發現。
+
+所有商店素材的尺寸都有 CI 守門：商店對尺寸零容忍，而錯誤尺寸從檔案總管看不出來。
 
 ---
 

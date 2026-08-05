@@ -92,23 +92,22 @@ jobs:
       - name: 商店素材尺寸必須符合規格
         run: |
           # 商店對素材尺寸零容忍，差一像素就退件，而錯誤尺寸從檔案總管看不出來。
-          node -e '
-            const fs = require("fs");
-            const spec = {
-              "store-assets/01-watch-page.png": [1280, 800],
-              "store-assets/02-settings-panel.png": [1280, 800],
-              "store-assets/promo-small-440x280.png": [440, 280]
-            };
-            let bad = 0;
-            for (const [file, [ew, eh]] of Object.entries(spec)) {
-              if (!fs.existsSync(file)) { console.error(`::error::缺少商店素材 ${file}`); bad++; continue; }
-              const buf = fs.readFileSync(file);
-              const w = buf.readUInt32BE(16), h = buf.readUInt32BE(20);
-              if (w !== ew || h !== eh) {
-                console.error(`::error::${file} 是 ${w}x${h}，商店要求 ${ew}x${eh}`); bad++;
-              } else {
-                console.log(`${file} ${w}x${h} 正確`);
-              }
-            }
-            process.exit(bad ? 1 : 0);
-          '
+          node tools/png-geometry.js store-assets/01-watch-page.png --expect-size 1280x800
+          node tools/png-geometry.js store-assets/02-settings-panel.png --expect-size 1280x800
+          node tools/png-geometry.js store-assets/promo-small-440x280.png --expect-size 440x280
+
+      - name: 商店圖示的留白必須符合規格
+        run: |
+          # 單獨一條，因為它守的不是尺寸而是**留白**：商店圖示要求圖形只佔中央 96x96、
+          # 四周 16px 透明邊。忘了留白的輸出照樣是 128x128，只驗尺寸完全擋不住，
+          # 而拿 manifest 的滿版 icons/icon.png 去填商店正是最容易犯的那個錯。
+          node tools/png-geometry.js store-assets/store-icon-128.png \
+            --expect-size 128x128 --expect-content 16,16,96,96
+          # 反向確認這條檢查真的有在守：滿版的 manifest 圖示必須被判為不合格。
+          # 沒有這行的話，png-geometry.js 哪天退化成「永遠回傳通過」也不會有人發現。
+          if node tools/png-geometry.js icons/icon.png \
+               --expect-size 128x128 --expect-content 16,16,96,96 2>/dev/null; then
+            echo "::error::留白檢查失效——滿版的 icons/icon.png 竟然通過了商店圖示規格"
+            exit 1
+          fi
+          echo "留白檢查的負向驗證通過（滿版圖示如預期被擋下）"
