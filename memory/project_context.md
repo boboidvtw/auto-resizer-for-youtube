@@ -11,6 +11,26 @@
 單元 + i18n 測試 **70/70 綠**（`node --test tests/unit.test.js tests/i18n.test.js`）；
 e2e 本次未重跑（需要 Brave + 真實 YouTube，程式碼未動故沿用 v3.0.0 的結果）。
 
+## 📛 2026-08-05 改名（repo + 本機資料夾）
+
+`youtube-auto-resizer-extension` → **`auto-resizer-for-youtube`**，與 v3.0.0 已改好的
+擴充功能名稱、專案首頁路徑、zip 檔名一致。GitHub 會自動重導舊網址。
+
+兩個非顯而易見的後果：
+
+1. **`gh repo rename` 會把 local remote 改寫成 HTTPS**。本專案（以及所有 repo）一律走 SSH，
+   改完必須 `git remote set-url origin git@github.com:...` 手動改回來，否則下次 push 會走錯協定。
+2. **未封裝擴充功能的 ID 跟著路徑變了**：
+   `okbhkhngknadfabcjenigdlidkohpfld` → **`jnjcoahpgokbiggnjpbhpmpjgcfpiacm`**
+   （ID = 絕對路徑的 SHA256 前 32 hex，映射 0-9a-f → a-p）。
+   對瀏覽器而言這是**另一個擴充功能**：日常 Brave 裡要重新載入，
+   舊 ID 底下的 `chrome.storage` 設定不會跟過來。`tests/e2e.js` 是執行時現算，不受影響。
+
+repo 內零寫死絕對路徑（`tests/run-e2e.sh` 用 `BASH_SOURCE`、`tests/e2e.js` 用 `__dirname`），
+所以改名沒有動到任何一行程式。改名後在新路徑重跑：測試 74/74 綠、`build-promo.sh` 產出零位元差異。
+
+---
+
 **下一步只剩一件事：把 `dist/auto-resizer-for-youtube-v3.0.0.zip` 上傳到 Chrome Web Store。**
 填表逐欄的對照文字在 `store-assets/store-listing.md`（含三語 description、single purpose
 說明、每個權限的 justification）。
