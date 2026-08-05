@@ -1,8 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "YouTube Auto Resizer & Quality Controller",
-  "version": "2.3.0",
-  "description": "自動調整 YouTube 播放器視訊尺寸與畫質，依螢幕解析度適配 4K 與多螢幕，實現滿視窗貼合與零留白的最佳觀賞體驗。",
+  "default_locale": "en",
+  "name": "__MSG_extName__",
+  "version": "3.0.0",
+  "description": "__MSG_extDescription__",
+  "author": "boboidvtw",
+  "homepage_url": "https://labs.moneyai168.com/projects/auto-resizer-for-youtube/",
+  "minimum_chrome_version": "102",
   "permissions": [
     "storage",
     "system.display"
@@ -15,7 +19,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "YouTube Auto Resizer 設定"
+    "default_title": "__MSG_actionTitle__"
   },
   "icons": {
     "16": "icons/icon-16.png",

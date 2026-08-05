@@ -598,7 +598,8 @@
     const button = document.createElement('button');
     button.id = POPUP_BUTTON_ID;
     button.className = 'ytp-button';
-    button.title = '彈出式播放器 (Pop-up Player)';
+    button.title = yarMessage('popupPlayerButton', 'Pop-out player');
+    button.setAttribute('aria-label', button.title);
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('width', '100%');

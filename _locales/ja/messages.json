@@ -1,0 +1,72 @@
+{
+  "extName": {
+    "message": "Auto Resizer for YouTube™",
+    "description": "拡張機能名。Google が第三者に求める [機能] for [製品]™ 形式に従う。名称を YouTube 商標で始めることはできない。"
+  },
+  "extDescription": {
+    "message": "再生画質・ウィンドウ・画面解像度に合わせて YouTube プレーヤーを自動リサイズ。4K とマルチモニターに対応、ポップアウト再生も。",
+    "description": "Chrome ウェブストアの簡易説明。132 文字以内。"
+  },
+  "actionTitle": { "message": "Auto Resizer の設定" },
+
+  "popupPlayerButton": { "message": "ポップアウト再生" },
+
+  "statusEnabled": { "message": "有効" },
+  "statusDisabled": { "message": "停止中" },
+  "statusSaveFailed": { "message": "保存に失敗しました" },
+
+  "sectionQuality": { "message": "優先する画質" },
+  "qualityAuto": { "message": "自動（YouTube に任せる）" },
+  "quality2160": { "message": "4K (2160p)" },
+  "quality1440": { "message": "2K (1440p)" },
+  "quality1080": { "message": "フル HD (1080p)" },
+  "quality720": { "message": "HD (720p)" },
+  "quality480": { "message": "SD (480p)" },
+  "qualityHint": {
+    "message": "新しい動画を開くたびに、この画質へ自動的に固定します。その画質がない動画では、利用できる最高画質を選びます。"
+  },
+
+  "sectionResizeMode": { "message": "プレーヤーのサイズ調整" },
+  "modeAutoTitle": { "message": "画質に合わせる" },
+  "modeAutoDesc": { "message": "動画の元の解像度を上限に、ウィンドウに収まる大きさまで縮めます" },
+  "modeFitTitle": { "message": "ウィンドウいっぱいに" },
+  "modeFitDesc": { "message": "画質にかかわらず、使える空間をすべて使います" },
+  "modeTheaterTitle": { "message": "シアターモード固定" },
+  "modeTheaterDesc": { "message": "プレーヤーを全幅にし、関連動画を下へ移動します" },
+  "modeDefaultTitle": { "message": "変更しない" },
+  "modeDefaultDesc": { "message": "YouTube 本来のレイアウトのままにします" },
+
+  "sectionDisplay": { "message": "画面への適応" },
+  "displayDetecting": { "message": "ディスプレイを検出中…" },
+  "displayUnavailable": { "message": "ディスプレイ情報を取得できません" },
+  "displayCurrent": {
+    "message": "$LABEL$（現在）",
+    "placeholders": { "label": { "content": "$1", "example": "内蔵 1710×1107 @2x" } }
+  },
+  "displayAwareQuality": { "message": "画面の解像度に合わせて画質を上げる" },
+  "ceilingAriaLabel": { "message": "自動画質の上限" },
+  "ceiling2160": { "message": "自動画質の上限：4K (2160p)" },
+  "ceiling1440": { "message": "自動画質の上限：2K (1440p)" },
+  "ceiling1080": { "message": "自動画質の上限：フル HD (1080p)" },
+  "ceiling720": { "message": "自動画質の上限：HD (720p)" },
+  "displayHint": {
+    "message": "「プレーヤーの幅 × 画面の画素密度」から必要な画質を求めます。動画にそれ以上の画質がない場合にかぎり、元の解像度を超えて拡大します。上で画質を指定した場合は、その指定が優先されます。"
+  },
+
+  "sectionPopupTarget": { "message": "ポップアウトを開く画面" },
+  "popupFollow": { "message": "現在のウィンドウがある画面" },
+  "popupLargest": { "message": "常にいちばん大きい画面" },
+  "popupInternal": { "message": "常に内蔵画面" },
+
+  "removeSideGaps": { "message": "プレーヤー両脇の余白を詰める" },
+  "resizeMainWindow": { "message": "ブラウザのウィンドウサイズも合わせる" },
+
+  "tierUhd": { "message": "4K" },
+  "tierHidpi": { "message": "HiDPI" },
+  "tierStandard": { "message": "標準" },
+
+  "sponsor": { "message": "コーヒーを一杯おごる" },
+
+  "displayLabelInternal": { "message": "内蔵" },
+  "displayLabelExternal": { "message": "外付け" }
+}

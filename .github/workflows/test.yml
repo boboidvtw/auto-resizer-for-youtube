@@ -1,0 +1,77 @@
+# test.yml — 單元測試與擴充功能封裝完整性的 CI 守門
+# Created: 2026-08-05
+#
+# 只跑得動單元測試：e2e 需要真實的 Brave 實例與真實的 YouTube，在 runner 上會被
+# 機器人驗證牆擋下（實測），把它放進 CI 只會製造無法信任的紅燈。e2e 仍是本機發版前必跑。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 單元測試（含 _locales 一致性）
+        run: node --test "tests/*.test.js"
+
+      - name: manifest.json 必須是合法 JSON，且版本號與 CHANGELOG 對得上
+        run: |
+          version=$(node -p "require('./manifest.json').version")
+          echo "manifest 版本：$version"
+          grep -q "## \[$version\]" CHANGELOG.md || {
+            echo "::error::CHANGELOG.md 找不到 [$version] 的段落 —— 發版時漏寫紀錄了"
+            exit 1
+          }
+
+      - name: 擴充功能不得含有對外連線
+        run: |
+          # 這條守的是隱私承諾本身。PRIVACY.md 宣稱「沒有任何對外連線」，
+          # 而承諾若沒有守門，總有一天會在某次「順手加個統計」時默默失效。
+          # 用 --exclude-dir 而不是事後 grep -v 過濾路徑：grep 的輸出前綴帶不帶 "./"
+          # 隨實作而異，靠字串過濾會安靜地失準（本機實測就誤報過一次）。
+          hits=$(grep -rnoE "fetch\(|XMLHttpRequest|navigator\.sendBeacon" \
+            --include="*.js" --include="*.html" --exclude-dir=tests . || true)
+          if [ -n "$hits" ]; then
+            echo "::error::發現對外連線的呼叫，與 PRIVACY.md 的承諾牴觸："
+            echo "$hits"
+            exit 1
+          fi
+          echo "確認無對外連線呼叫"
+
+      - name: manifest 宣告的圖示都要存在，且尺寸正確
+        run: |
+          # 刻意不比對 PNG 的位元組：ubuntu 的 librsvg 與開發機 homebrew 的版本輸出未必
+          # 逐位元組相同，那種比對只會製造一條永遠紅、最後被大家忽略的檢查。
+          # 這裡守的是「檔案在、尺寸對」，改圖後要重跑 build.sh 由 README 與 build.sh 說明承擔。
+          node -e '
+            const fs = require("fs");
+            const icons = require("./manifest.json").icons;
+            let bad = 0;
+            for (const [size, file] of Object.entries(icons)) {
+              if (!fs.existsSync(file)) {
+                console.error(`::error::manifest 宣告的 ${file} 不存在`); bad++; continue;
+              }
+              // PNG 的 IHDR 寬高固定在位元組 16..24
+              const buf = fs.readFileSync(file);
+              const w = buf.readUInt32BE(16), h = buf.readUInt32BE(20);
+              if (w !== Number(size) || h !== Number(size)) {
+                console.error(`::error::${file} 是 ${w}x${h}，manifest 宣告的是 ${size}`); bad++;
+              } else {
+                console.log(`${file} ${w}x${h} 正確`);
+              }
+            }
+            if (!fs.existsSync("icons/icon.svg")) {
+              console.error("::error::缺少向量來源 icons/icon.svg"); bad++;
+            }
+            process.exit(bad ? 1 : 0);
+          '

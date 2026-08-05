@@ -36,10 +36,10 @@ body {
   gap: 8px;
 }
 
-.youtube-icon {
+.brand-icon {
   width: 24px;
   height: 24px;
-  color: #ff0033;
+  color: #1F6FEB;
 }
 
 .title-group {
@@ -55,8 +55,8 @@ body {
 }
 
 .badge {
-  background: rgba(255, 0, 51, 0.15);
-  color: #ff3355;
+  background: rgba(31, 111, 235, 0.15);
+  color: #5B9BFF;
   font-size: 10px;
   font-weight: 600;
   padding: 2px 6px;
@@ -99,7 +99,7 @@ body {
 }
 
 input:checked + .slider {
-  background-color: #ff0033;
+  background-color: #1F6FEB;
 }
 
 input:checked + .slider:before {
@@ -149,7 +149,7 @@ input:checked + .slider:before {
 }
 
 .select-input:hover, .select-input:focus {
-  border-color: #ff0033;
+  border-color: #1F6FEB;
 }
 
 /* Mode options */
@@ -178,8 +178,8 @@ input:checked + .slider:before {
 }
 
 .mode-card input:checked + .mode-box {
-  background: rgba(255, 0, 51, 0.08);
-  border-color: #ff0033;
+  background: rgba(31, 111, 235, 0.08);
+  border-color: #1F6FEB;
 }
 
 .mode-title {
@@ -261,7 +261,7 @@ input:checked + .slider:before {
 }
 
 .checkbox-label input {
-  accent-color: #ff0033;
+  accent-color: #1F6FEB;
   width: 14px;
   height: 14px;
 }
@@ -291,7 +291,7 @@ input:checked + .slider:before {
 }
 
 .sponsor-link a {
-  color: #ff3355;
+  color: #5B9BFF;
   text-decoration: none;
   font-weight: 500;
 }

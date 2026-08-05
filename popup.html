@@ -1,22 +1,36 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>YouTube Auto Resizer</title>
+  <title data-i18n="extName">Auto Resizer for YouTube™</title>
   <link rel="stylesheet" href="popup.css">
 </head>
+<!--
+  所有使用者可見字串都掛 data-i18n（或 data-i18n-aria-label），由 popup.js 在
+  DOMContentLoaded 時以 chrome.i18n.getMessage 填入。HTML 裡留的是英文預設字，
+  這樣即使 i18n 失效面板也不會變成一片空白。
+-->
 <body>
   <div class="card">
     <!-- Header -->
     <header class="header">
       <div class="logo">
-        <svg class="youtube-icon" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+        <!--
+          自製品牌圖示：沿對角向外展開的雙箭頭，與 icons/icon.svg 同一套圖形。
+          原本這裡放的是 YouTube 官方 logo 的 path —— 那是註冊商標，第三方擴充功能
+          不得使用，會觸犯 Chrome Web Store 的 impersonation 與 IP 政策。
+        -->
+        <svg class="brand-icon" viewBox="0 0 128 128" fill="none" aria-hidden="true">
+          <g fill="currentColor" stroke="currentColor">
+            <line x1="45" y1="45" x2="83" y2="83" stroke-width="13" stroke-linecap="round"/>
+            <path d="M26 26 H68 L26 68 Z"/>
+            <path d="M102 102 H60 L102 60 Z"/>
+          </g>
         </svg>
         <div class="title-group">
           <h1>Auto Resizer</h1>
-          <span class="badge">v2.3</span>
+          <span class="badge" id="version-badge"></span>
         </div>
       </div>
       <label class="switch">
@@ -29,48 +43,50 @@
     <main class="content">
       <!-- Quality Selector -->
       <section class="section">
-        <label class="section-label">預設優先畫質</label>
+        <label class="section-label" for="quality-select" data-i18n="sectionQuality">Preferred quality</label>
         <select id="quality-select" class="select-input">
-          <option value="auto" selected>Auto (交給 YouTube 自動判斷)</option>
-          <option value="2160p">4K (2160p)</option>
-          <option value="1440p">2K (1440p)</option>
-          <option value="1080p">Full HD (1080p)</option>
-          <option value="720p">HD (720p)</option>
-          <option value="480p">SD (480p)</option>
+          <option value="auto" selected data-i18n="qualityAuto">Auto (let YouTube decide)</option>
+          <option value="2160p" data-i18n="quality2160">4K (2160p)</option>
+          <option value="1440p" data-i18n="quality1440">2K (1440p)</option>
+          <option value="1080p" data-i18n="quality1080">Full HD (1080p)</option>
+          <option value="720p" data-i18n="quality720">HD (720p)</option>
+          <option value="480p" data-i18n="quality480">SD (480p)</option>
         </select>
-        <p class="section-hint">選定畫質後，每支新影片會自動鎖定到該畫質；若該影片沒有此畫質，則取可用的最高畫質。</p>
+        <p class="section-hint" data-i18n="qualityHint">
+          Every new video locks to this quality. If the video does not offer it, the highest available is used instead.
+        </p>
       </section>
 
       <!-- Resize Mode -->
       <section class="section">
-        <label class="section-label">播放器尺寸縮放模式</label>
+        <label class="section-label" data-i18n="sectionResizeMode">Player sizing mode</label>
         <div class="mode-options">
           <label class="mode-card">
             <input type="radio" name="resizeMode" value="autoByQuality" checked>
             <div class="mode-box">
-              <span class="mode-title">⚡ 依畫質自動匹配尺寸</span>
-              <span class="mode-desc">以影片原生解析度為上限，再收斂到視窗可容納的大小</span>
+              <span class="mode-title" data-i18n="modeAutoTitle">Match the quality</span>
+              <span class="mode-desc" data-i18n="modeAutoDesc">Caps at the video's native resolution, then shrinks to fit the window</span>
             </div>
           </label>
           <label class="mode-card">
             <input type="radio" name="resizeMode" value="fitWindow">
             <div class="mode-box">
-              <span class="mode-title">強制視窗貼合 (Fit)</span>
-              <span class="mode-desc">不論畫質一律撐滿視窗可用空間</span>
+              <span class="mode-title" data-i18n="modeFitTitle">Fill the window</span>
+              <span class="mode-desc" data-i18n="modeFitDesc">Always uses all available window space, whatever the quality</span>
             </div>
           </label>
           <label class="mode-card">
             <input type="radio" name="resizeMode" value="theater">
             <div class="mode-box">
-              <span class="mode-title">強制劇院模式</span>
-              <span class="mode-desc">播放器滿寬，推薦影片移到下方</span>
+              <span class="mode-title" data-i18n="modeTheaterTitle">Force theater mode</span>
+              <span class="mode-desc" data-i18n="modeTheaterDesc">Full-width player, recommendations move below</span>
             </div>
           </label>
           <label class="mode-card">
             <input type="radio" name="resizeMode" value="default">
             <div class="mode-box">
-              <span class="mode-title">預設小圖</span>
-              <span class="mode-desc">維持 YouTube 原生尺寸</span>
+              <span class="mode-title" data-i18n="modeDefaultTitle">Leave it alone</span>
+              <span class="mode-desc" data-i18n="modeDefaultDesc">Keeps YouTube's own layout</span>
             </div>
           </label>
         </div>
@@ -78,30 +94,33 @@
 
       <!-- Display Awareness -->
       <section class="section" aria-labelledby="display-section-label">
-        <label class="section-label" id="display-section-label">螢幕適配</label>
+        <label class="section-label" id="display-section-label" data-i18n="sectionDisplay">Display adaptation</label>
         <ul class="display-list" id="display-list">
-          <li class="display-row display-row--empty">偵測顯示器中…</li>
+          <li class="display-row display-row--empty" data-i18n="displayDetecting">Detecting displays…</li>
         </ul>
         <label class="checkbox-label">
           <input type="checkbox" id="displayAwareQuality-toggle" checked>
-          <span>依螢幕解析度自動提升畫質</span>
+          <span data-i18n="displayAwareQuality">Raise quality to match the screen</span>
         </label>
-        <select id="autoQualityCeiling-select" class="select-input" aria-label="自動畫質上限">
-          <option value="hd2160">自動畫質上限：4K (2160p)</option>
-          <option value="hd1440">自動畫質上限：2K (1440p)</option>
-          <option value="hd1080">自動畫質上限：Full HD (1080p)</option>
-          <option value="hd720">自動畫質上限：HD (720p)</option>
+        <select id="autoQualityCeiling-select" class="select-input" data-i18n-aria-label="ceilingAriaLabel" aria-label="Automatic quality ceiling">
+          <option value="hd2160" data-i18n="ceiling2160">Quality ceiling: 4K (2160p)</option>
+          <option value="hd1440" data-i18n="ceiling1440">Quality ceiling: 2K (1440p)</option>
+          <option value="hd1080" data-i18n="ceiling1080">Quality ceiling: Full HD (1080p)</option>
+          <option value="hd720" data-i18n="ceiling720">Quality ceiling: HD (720p)</option>
         </select>
-        <p class="section-hint">依「播放器寬度 × 螢幕像素密度」推算需要的畫質。只有在影片本身沒有更高畫質時，才會超過原生解析度放大來填滿畫面。設為「自動」以外的預設優先畫質時，一律以你指定的為準。</p>
+        <p class="section-hint" data-i18n="displayHint">
+          Derives the quality it needs from player width x pixel density. It only upscales past the video's native
+          resolution when the video has nothing better to offer. Setting a preferred quality above overrides this.
+        </p>
       </section>
 
       <!-- Pop-up Player Placement -->
       <section class="section" aria-labelledby="popup-target-label">
-        <label class="section-label" id="popup-target-label">彈出播放器開啟位置</label>
+        <label class="section-label" id="popup-target-label" data-i18n="sectionPopupTarget">Open pop-out player on</label>
         <select id="popupTargetDisplay-select" class="select-input" aria-labelledby="popup-target-label">
-          <option value="follow">跟隨目前視窗所在的螢幕</option>
-          <option value="largest">一律開在最大的螢幕</option>
-          <option value="internal">一律開在內建螢幕</option>
+          <option value="follow" data-i18n="popupFollow">The screen the window is on</option>
+          <option value="largest" data-i18n="popupLargest">Always the largest screen</option>
+          <option value="internal" data-i18n="popupInternal">Always the built-in screen</option>
         </select>
       </section>
 
@@ -109,11 +128,11 @@
       <section class="section checklist">
         <label class="checkbox-label">
           <input type="checkbox" id="removeSideGaps-toggle" checked>
-          <span>自動消除播放器兩側留白區</span>
+          <span data-i18n="removeSideGaps">Remove the gaps beside the player</span>
         </label>
         <label class="checkbox-label">
           <input type="checkbox" id="resizeMainWindow-toggle">
-          <span>同步調整瀏覽器視窗尺寸</span>
+          <span data-i18n="resizeMainWindow">Resize the browser window to match</span>
         </label>
       </section>
     </main>
@@ -122,10 +141,11 @@
     <footer class="footer">
       <div class="status-indicator">
         <span class="dot"></span>
-        <span id="status-text">運作中</span>
+        <span id="status-text"></span>
       </div>
       <div class="sponsor-link">
-        <a href="https://www.paypal.me/boboidvtw" target="_blank" rel="noopener noreferrer">❤️ 支持贊助</a>
+        <a href="https://buymeacoffee.com/boboidvtw" target="_blank" rel="noopener noreferrer"
+           data-i18n="sponsor">Buy me a coffee</a>
       </div>
     </footer>
   </div>

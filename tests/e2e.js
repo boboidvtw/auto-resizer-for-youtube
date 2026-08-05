@@ -133,6 +133,54 @@ const SIDEBAR_MAX_RATIO = 1.6;
 
   if (panelTarget) {
     const panel = await Sess.open(panelTarget.webSocketDebuggerUrl);
+
+    /*
+     * ---------- i18n 真的有填進去嗎 ----------
+     * `_locales/` 存在、擴充功能載得起來、單元測試全綠 —— 這三件事加起來仍然
+     * 不能證明面板上的字有被換掉。只要 popup.js 的注入沒跑（例如選擇器打錯、
+     * DOMContentLoaded 沒觸發），畫面會安靜地停在 HTML 裡的英文 fallback，
+     * 而所有既有檢查照樣通過。這裡直接讀真實 DOM 來驗。
+     */
+    const i18nProbe = await panel.eval(`(() => {
+      const nodes = [...document.querySelectorAll('[data-i18n]')];
+      const empty = nodes.filter((el) => !el.textContent.trim()).map((el) => el.dataset.i18n);
+      const ceiling = document.getElementById('autoQualityCeiling-select');
+      return JSON.stringify({
+        total: nodes.length,
+        empty,
+        badge: (document.getElementById('version-badge') || {}).textContent || '',
+        manifestVersion: chrome.runtime.getManifest().version,
+        manifestName: chrome.runtime.getManifest().name,
+        uiLang: chrome.i18n.getUILanguage(),
+        htmlLang: document.documentElement.lang,
+        ariaLabel: ceiling ? ceiling.getAttribute('aria-label') : '',
+        sampleKey: 'sectionQuality',
+        sampleDom: (document.querySelector('[data-i18n="sectionQuality"]') || {}).textContent || '',
+        sampleMsg: chrome.i18n.getMessage('sectionQuality')
+      });
+    })()`);
+    const i18n = JSON.parse(i18nProbe);
+
+    check('面板所有 data-i18n 節點都有文字（沒有翻譯留白）',
+      i18n.total > 10 && i18n.empty.length === 0,
+      `共 ${i18n.total} 個節點，空的：${i18n.empty.join(', ') || '無'}`);
+
+    check('面板文字確實來自 chrome.i18n，而非 HTML 裡的 fallback',
+      i18n.sampleMsg !== '' && i18n.sampleDom === i18n.sampleMsg,
+      `DOM="${i18n.sampleDom}" vs getMessage="${i18n.sampleMsg}" (UI 語系 ${i18n.uiLang})`);
+
+    check('擴充功能名稱由 __MSG_extName__ 解析且不以 YouTube 開頭',
+      !/^\s*youtube/i.test(i18n.manifestName) && !i18n.manifestName.includes('__MSG_'),
+      `name="${i18n.manifestName}"`);
+
+    check('版本徽章跟著 manifest 走，沒有硬編碼',
+      i18n.badge === `v${i18n.manifestVersion}`,
+      `徽章="${i18n.badge}" manifest=${i18n.manifestVersion}`);
+
+    check('aria-label 也有在地化', !!i18n.ariaLabel, `aria-label="${i18n.ariaLabel}"`);
+    check('<html lang> 跟著瀏覽器 UI 語系', i18n.htmlLang === i18n.uiLang,
+      `html lang="${i18n.htmlLang}" UI="${i18n.uiLang}"`);
+
     const applyMode = async (mode) => {
       await panel.eval(`new Promise(r => chrome.storage.sync.set({ yt_auto_resizer_settings: ${SETTINGS(mode)} }, r))`);
       await sleep(3000);

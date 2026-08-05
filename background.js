@@ -257,6 +257,12 @@ async function yarHandleGetDisplays(message, sendResponse) {
   const currentId = current ? current.id : '';
   const dpr = Number.isFinite(message && message.dpr) ? message.dpr : null;
 
+  // display.js 刻意維持純函式（也被單元測試以 node:vm 載入），在地化字串由這裡注入
+  const displayLabels = {
+    internal: yarMessage('displayLabelInternal', 'Built-in'),
+    external: yarMessage('displayLabelExternal', 'External')
+  };
+
   sendResponse({
     currentId,
     displays: displays
@@ -264,7 +270,7 @@ async function yarHandleGetDisplays(message, sendResponse) {
       .filter(Boolean)
       .map((d) => ({
         id: d.id,
-        label: yarDescribeDisplay(d),
+        label: yarDescribeDisplay(d, displayLabels),
         tier: d.tier,
         isInternal: d.isInternal,
         isPrimary: d.isPrimary,

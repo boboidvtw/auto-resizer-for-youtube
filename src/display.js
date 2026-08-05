@@ -103,11 +103,20 @@ function yarClassifyDisplay(display, dpr) {
 /**
  * 產生給使用者看的螢幕標籤。
  * 不能用 `display.name`：macOS 實測恆為空字串，全部螢幕會長得一模一樣。
+ *
+ * 「內建 / 外接」這兩個字要跟著瀏覽器語系走，但本檔宣稱是純函式、而且同時被
+ * service worker 與單元測試載入 —— 在這裡直接呼叫 `chrome.i18n` 會讓它既不純、
+ * 又在 node 的測試沙箱裡炸掉。改為由呼叫端注入，預設值用英文（`default_locale`）。
+ *
  * @param {object|null} classified yarClassifyDisplay 的輸出
+ * @param {{internal?:string, external?:string, unknown?:string}} [labels] 已在地化的字串
  */
-function yarDescribeDisplay(classified) {
-  if (!classified) return '未知螢幕';
-  const kind = classified.isInternal ? '內建' : '外接';
+function yarDescribeDisplay(classified, labels) {
+  const text = labels || {};
+  if (!classified) return text.unknown || 'Unknown display';
+  const kind = classified.isInternal
+    ? (text.internal || 'Built-in')
+    : (text.external || 'External');
   const size = `${classified.logicalWidth}×${classified.logicalHeight}`;
   const retina = classified.dpr && classified.dpr > 1 ? ` @${classified.dpr}x` : '';
   return `${kind} ${size}${retina}`;

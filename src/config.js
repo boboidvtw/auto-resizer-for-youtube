@@ -163,11 +163,30 @@ const YAR_POPUP_MARKER = 'yar-popup';
 const YAR_POPUP_ATTRIBUTE = 'yar-popup';
 
 function yarLog(...args) {
-  if (YAR_DEBUG) console.log('[YouTube Auto Resizer]', ...args);
+  if (YAR_DEBUG) console.log('[Auto Resizer]', ...args);
 }
 
 function yarWarn(...args) {
-  console.warn('[YouTube Auto Resizer]', ...args);
+  console.warn('[Auto Resizer]', ...args);
+}
+
+/**
+ * 取在地化字串（`_locales/<lang>/messages.json`）；取不到就回傳呼叫端給的 fallback。
+ *
+ * 為什麼一定要有 fallback：`chrome.i18n.getMessage` 找不到 key 時回的是**空字串**而非
+ * undefined，直接寫進 DOM 會讓那一格變空白 —— 缺一則翻譯的代價是介面破洞。
+ * 另外本檔會被單元測試以 node:vm 載入，那裡沒有 `chrome`，故先做存在性檢查。
+ *
+ * @param {string} key messages.json 的鍵
+ * @param {string} fallback 取不到時顯示的字（慣例上放英文）
+ * @param {string[]} [substitutions] 對應 messages.json 的 placeholders
+ * @returns {string}
+ */
+function yarMessage(key, fallback, substitutions) {
+  if (typeof chrome === 'undefined' || !chrome.i18n || typeof chrome.i18n.getMessage !== 'function') {
+    return fallback;
+  }
+  return chrome.i18n.getMessage(key, substitutions) || fallback;
 }
 
 /**

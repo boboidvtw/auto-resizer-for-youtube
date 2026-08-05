@@ -1,0 +1,72 @@
+{
+  "extName": {
+    "message": "Auto Resizer for YouTube™",
+    "description": "Extension name. Follows Google's required third-party naming format, [Feature] for [Product]™ — the name must not lead with the YouTube trademark."
+  },
+  "extDescription": {
+    "message": "Auto-fits the YouTube player to your window, screen and playback quality. 4K and multi-monitor aware, with a pop-out player.",
+    "description": "Chrome Web Store listing description, 132 character limit."
+  },
+  "actionTitle": { "message": "Auto Resizer settings" },
+
+  "popupPlayerButton": { "message": "Pop-out player" },
+
+  "statusEnabled": { "message": "Active" },
+  "statusDisabled": { "message": "Paused" },
+  "statusSaveFailed": { "message": "Save failed" },
+
+  "sectionQuality": { "message": "Preferred quality" },
+  "qualityAuto": { "message": "Auto (let YouTube decide)" },
+  "quality2160": { "message": "4K (2160p)" },
+  "quality1440": { "message": "2K (1440p)" },
+  "quality1080": { "message": "Full HD (1080p)" },
+  "quality720": { "message": "HD (720p)" },
+  "quality480": { "message": "SD (480p)" },
+  "qualityHint": {
+    "message": "Every new video locks to this quality. If the video does not offer it, the highest available is used instead."
+  },
+
+  "sectionResizeMode": { "message": "Player sizing mode" },
+  "modeAutoTitle": { "message": "Match the quality" },
+  "modeAutoDesc": { "message": "Caps at the video's native resolution, then shrinks to fit the window" },
+  "modeFitTitle": { "message": "Fill the window" },
+  "modeFitDesc": { "message": "Always uses all available window space, whatever the quality" },
+  "modeTheaterTitle": { "message": "Force theater mode" },
+  "modeTheaterDesc": { "message": "Full-width player, recommendations move below" },
+  "modeDefaultTitle": { "message": "Leave it alone" },
+  "modeDefaultDesc": { "message": "Keeps YouTube's own layout" },
+
+  "sectionDisplay": { "message": "Display adaptation" },
+  "displayDetecting": { "message": "Detecting displays…" },
+  "displayUnavailable": { "message": "Display information unavailable" },
+  "displayCurrent": {
+    "message": "$LABEL$ (current)",
+    "placeholders": { "label": { "content": "$1", "example": "Built-in 1710x1107 @2x" } }
+  },
+  "displayAwareQuality": { "message": "Raise quality to match the screen" },
+  "ceilingAriaLabel": { "message": "Automatic quality ceiling" },
+  "ceiling2160": { "message": "Quality ceiling: 4K (2160p)" },
+  "ceiling1440": { "message": "Quality ceiling: 2K (1440p)" },
+  "ceiling1080": { "message": "Quality ceiling: Full HD (1080p)" },
+  "ceiling720": { "message": "Quality ceiling: HD (720p)" },
+  "displayHint": {
+    "message": "Derives the quality it needs from player width x pixel density. It only upscales past the video's native resolution when the video has nothing better to offer. Setting a preferred quality above overrides this."
+  },
+
+  "sectionPopupTarget": { "message": "Open pop-out player on" },
+  "popupFollow": { "message": "The screen the window is on" },
+  "popupLargest": { "message": "Always the largest screen" },
+  "popupInternal": { "message": "Always the built-in screen" },
+
+  "removeSideGaps": { "message": "Remove the gaps beside the player" },
+  "resizeMainWindow": { "message": "Resize the browser window to match" },
+
+  "tierUhd": { "message": "4K" },
+  "tierHidpi": { "message": "HiDPI" },
+  "tierStandard": { "message": "Standard" },
+
+  "sponsor": { "message": "Buy me a coffee" },
+
+  "displayLabelInternal": { "message": "Built-in" },
+  "displayLabelExternal": { "message": "External" }
+}

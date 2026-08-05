@@ -1,0 +1,30 @@
+<!--
+  icon.svg — 擴充功能品牌圖示的單一向量來源
+  Single vector source for every raster icon size.
+
+  Created: 2026-08-05
+  設計語意：沿對角向外展開的雙箭頭 = resize / expand。
+  刻意避開紅底白三角：那是 YouTube 的註冊商標，第三方擴充功能不得使用。
+
+  為什麼只有三個圖形：Chrome 工具列實際顯示的是 16x16。第一版用「四角 L 形括號
+  + 中央 16:9 細框」在 128px 下好看，縮到 16px 全部糊成一個方塊（實測）。
+  16px 只有 256 個像素，元素越少、筆畫越粗，才越認得出來。
+
+  產生點陣檔請跑 icons/build.sh（rsvg-convert 128/48/32/16）。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Auto Resizer">
+  <title>Auto Resizer</title>
+
+  <!-- 底：藍色圓角方塊。與 YouTube 的品牌紅完全區隔，且在明暗兩種工具列上都看得見 -->
+  <rect width="128" height="128" rx="28" fill="#1F6FEB"/>
+
+  <g fill="#FFFFFF" stroke="#FFFFFF">
+    <!-- 對角軸線：兩個箭頭之間的連桿。圓端點讓它在 16px 時不會斷成兩截 -->
+    <line x1="45" y1="45" x2="83" y2="83" stroke-width="13" stroke-linecap="round"/>
+
+    <!-- 左上箭頭：直角朝外的實心三角。實心圖形縮小後仍是實心，描邊則會細到消失 -->
+    <path d="M26 26 H68 L26 68 Z"/>
+    <!-- 右下箭頭：同一形狀繞中心旋轉 180 度 -->
+    <path d="M102 102 H60 L102 60 Z"/>
+  </g>
+</svg>

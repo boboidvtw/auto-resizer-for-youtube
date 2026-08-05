@@ -1,7 +1,63 @@
-# Project Context & Handoff Log - YouTube Auto Resizer & Quality Controller
+# Project Context & Handoff Log - Auto Resizer for YouTube™
 
-> Last Closed: 2026-08-04T20:54:25+08:00 (v2.3.0, code commit b7c4eb2 — 4K / 多螢幕適配；
+> Last Closed: 2026-08-05 (v3.0.0 — Chrome Web Store 上架前合規整備)
+> 前一版：2026-08-04T20:54:25+08:00 (v2.3.0, code commit b7c4eb2 — 4K / 多螢幕適配；
 > 跨螢幕拖曳實測於 d3b4686 補記)
+
+---
+
+## ⚖️ v3.0.0 — 上架合規整備（功能零變更）
+
+全面法律檢視後的整備。**三項原本會直接被 Chrome Web Store 退件**：
+
+1. **名稱以 YouTube 商標開頭**。Google 要求第三方採 `[功能] for [產品]™`。
+   實例：*YouTube Tweaks* 2023-09 因商標被下架，改名 `Tweaks for YouTube™` 才復原。
+   → 改為 `Auto Resizer for YouTube™`。
+2. **圖示與 popup 的 SVG 是 YouTube 官方 logo 的直接複製**（紅底白三角、
+   `d="M23.498 6.186..."` 逐字相同）。同時觸犯商標、logo 著作權與 impersonation 政策。
+   → 自製對角雙箭頭圖示，單一向量來源 `icons/icon.svg` + `build.sh`。
+3. **LICENSE 的 MIT 免責條款被改壞** —— `MECHANICAL FOR A PARTICULAR PURPOSE`
+   應為 `MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE`，適售性擔保的排除整段不見。
+   **不是理論問題**：`gh repo view --json licenseInfo` 回的是 `{"key":"other"}` 而非 `mit`，
+   GitHub 認不出授權，與 README 的 MIT 徽章互相矛盾。→ 貼回標準全文。
+
+另補：三語 i18n（en/zh_TW/ja）、PRIVACY.md + 託管頁、CHANGELOG.md、CI、專案首頁。
+贊助由 PayPal 改 Buy Me a Coffee（PayPal 禁台灣賣家對台灣買家收款）。
+
+### 圖示設計的實測教訓
+
+第一版用「四角 L 形括號 + 中央 16:9 細框」，128px 下好看，**縮到 16px 全部糊成一個藍方塊**。
+Chrome 工具列實際顯示的就是 16px —— 256 個像素撐不起四個細元素。
+改為三個粗元素（一條對角線 + 兩個實心三角）才在 16px 認得出來。
+**圖示一定要看 16px 的實際成像再定案，不能只看 128px。**
+
+### i18n 的守門設計
+
+翻譯漂移**不會讓任何東西壞掉** —— 擴充功能照樣載入、e2e 照樣全綠，只會讓某一格變空白
+或停在英文。因此加了兩層：
+
+- `tests/i18n.test.js`（11 條）：各語系 key 集合相同、訊息非空、placeholder 每語系都保留、
+  name/description 不超商店上限、名稱不得以 YouTube 開頭、呼叫端用到的 key 都存在、無孤兒 key。
+  **寫完立刻做了負向驗證**（故意刪一則 ja 翻譯 + 灌爆長度），三條斷言如預期變紅。
+- e2e 6 條：直接讀真實 DOM 確認 32 個 `data-i18n` 節點都有文字、且文字等於
+  `chrome.i18n.getMessage()` 的回傳（而非 HTML 裡的 fallback）、`__MSG_extName__` 有解析、
+  版本徽章等於 manifest 版本、aria-label 有在地化、`<html lang>` 跟著 UI 語系。
+
+`src/display.js` 維持純函式：`yarDescribeDisplay()` 的「內建/外接」改由呼叫端注入，
+**不可**在裡面呼叫 `chrome.i18n` —— 該檔同時被 service worker 與 node:vm 測試載入，會炸 ReferenceError。
+
+### CI 的兩個折衷
+
+- **圖示不做 byte 比對**：ubuntu 的 librsvg 與開發機 homebrew 版本輸出未必逐位元組相同，
+  那種檢查只會製造一條永遠紅、最後被忽略的 CI。改為驗 PNG 的 IHDR 寬高與 manifest 宣告一致。
+- **對外連線掃描用 `--exclude-dir=tests` 而非事後 `grep -v "^./tests/"`**：
+  grep 輸出前綴帶不帶 `./` 隨實作而異，靠字串過濾會安靜失準（本機實測誤報過一次）。
+
+### 待辦
+
+- [ ] **Buy Me a Coffee 帳號要去註冊**。連結已指向 `buymeacoffee.com/boboidvtw`，帳號尚未建立。
+- [ ] 商店素材：1280×800 截圖至少一張、440×280 小型宣傳圖。
+- [ ] 上架後把商店連結補進 README、專案首頁與 `bobo-labs` 的 project card。
 
 ---
 

@@ -523,11 +523,30 @@ test('yarDescribeDisplay: macOS 的 name 是空字串，必須自行組出可辨
   // 實測 chrome.system.display 在 macOS 的 name 恆為 ''，不能拿來當 UI 標籤
   const builtin = sandbox.yarDescribeDisplay(sandbox.yarClassifyDisplay(REAL_DISPLAYS[0], 2));
   const uhd = sandbox.yarDescribeDisplay(sandbox.yarClassifyDisplay(REAL_DISPLAYS[1], 1));
-  assert.match(builtin, /內建/);
+  assert.match(builtin, /Built-in/, '未注入標籤時退回英文（default_locale 是 en）');
   assert.match(builtin, /1710\s*[x×]\s*1107/);
-  assert.match(uhd, /外接/);
+  assert.match(builtin, /@2x/);
+  assert.match(uhd, /External/);
   assert.match(uhd, /3840\s*[x×]\s*2160/);
   assert.notStrictEqual(builtin, uhd, '兩台螢幕的標籤必須可區分');
+});
+
+test('yarDescribeDisplay: 在地化標籤由呼叫端注入，display.js 本身不碰 chrome.i18n', () => {
+  /*
+   * 這條守的是 v3.0 的 i18n 邊界：display.js 同時被 service worker 與本測試載入，
+   * 一旦有人圖方便在裡面直接呼叫 chrome.i18n，node 的沙箱就會炸 ReferenceError。
+   * 注入版與預設版必須都能運作。
+   */
+  const zhTw = { internal: '內建', external: '外接', unknown: '未知螢幕' };
+  const builtin = sandbox.yarDescribeDisplay(sandbox.yarClassifyDisplay(REAL_DISPLAYS[0], 2), zhTw);
+  const uhd = sandbox.yarDescribeDisplay(sandbox.yarClassifyDisplay(REAL_DISPLAYS[1], 1), zhTw);
+  assert.match(builtin, /內建 1710×1107 @2x/);
+  assert.match(uhd, /外接 3840×2160/);
+  assert.strictEqual(sandbox.yarDescribeDisplay(null, zhTw), '未知螢幕');
+  assert.strictEqual(sandbox.yarDescribeDisplay(null), 'Unknown display');
+
+  // 只給一半的標籤時，缺的那一半要退回英文而不是變成 undefined
+  assert.match(sandbox.yarDescribeDisplay(sandbox.yarClassifyDisplay(REAL_DISPLAYS[1], 1), { internal: '內建' }), /External/);
 });
 
 // ------------------------------------------------------------ 螢幕選擇
