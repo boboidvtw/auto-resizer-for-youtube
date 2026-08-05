@@ -1,8 +1,19 @@
 # Project Context & Handoff Log - Auto Resizer for YouTube™
 
-> Last Closed: 2026-08-05 (v3.0.0 — Chrome Web Store 上架前合規整備)
-> 前一版：2026-08-04T20:54:25+08:00 (v2.3.0, code commit b7c4eb2 — 4K / 多螢幕適配；
+> Last Closed: 2026-08-05T14:56:07+08:00 (v3.0.0 收尾 — 商店素材補齊，程式碼零變更)
+> 前一版：2026-08-05 (v3.0.0 — Chrome Web Store 上架前合規整備, commit ad6e4f8)
+> 更前一版：2026-08-04T20:54:25+08:00 (v2.3.0, code commit b7c4eb2 — 4K / 多螢幕適配；
 > 跨螢幕拖曳實測於 d3b4686 補記)
+
+**本次收工的實際狀態**：沒有新的程式修改。工作區只剩一個未追蹤的商店素材
+`store-assets/store-icon-128.png`（128×128、圖形佔中央 96×96、四周 16px 透明邊），
+已補進版控並在 `store-assets/store-listing.md` 的素材表登記。
+單元 + i18n 測試 **70/70 綠**（`node --test tests/unit.test.js tests/i18n.test.js`）；
+e2e 本次未重跑（需要 Brave + 真實 YouTube，程式碼未動故沿用 v3.0.0 的結果）。
+
+**下一步只剩一件事：把 `dist/auto-resizer-for-youtube-v3.0.0.zip` 上傳到 Chrome Web Store。**
+填表逐欄的對照文字在 `store-assets/store-listing.md`（含三語 description、single purpose
+說明、每個權限的 justification）。
 
 ---
 
@@ -73,7 +84,12 @@ Chrome 工具列實際顯示的就是 16px —— 256 個像素撐不起四個�
 ### 待辦
 
 - [x] ~~贊助金流~~ 維持 PayPal（見上方「贊助金流」段落），無須註冊新帳號。
-- [x] ~~商店素材~~ 1280×800 截圖 ×2 與 440×280 宣傳圖已產生，尺寸有 CI 守門。
+- [x] ~~商店素材~~ 1280×800 截圖 ×2、440×280 宣傳圖、128×128 商店圖示皆已產生並進版控，
+      前兩者尺寸有 CI 守門。
+- [ ] **`store-icon-128.png` 沒有產生腳本**，是唯一沒有向量單一來源保障的素材——
+      改 `icons/icon.svg` 不會連帶更新它。補進 `tools/build-promo.sh`（同一支 rsvg-convert
+      流程，渲染 96px 再置中貼到 128 畫布），並比照 440×280 加尺寸自我檢查與 CI 守門。
+- [ ] **送審**：上傳 `dist/auto-resizer-for-youtube-v3.0.0.zip`，填表照 `store-assets/store-listing.md`。
 - [ ] 上架後把商店連結補進 README、專案首頁與 `bobo-labs` 的 project card。
 
 ---

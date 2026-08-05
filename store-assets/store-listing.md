@@ -210,12 +210,15 @@ Google LLC および YouTube とは提携・後援・推奨のいずれの関係
 
 | 欄位 | 檔案 | 規格 |
 |---|---|---|
+| Store icon | `store-assets/store-icon-128.png` | 128×128 ✓（圖形佔中央 96×96，四周留 16px 透明邊——商店規格與 manifest 的 `icons/icon.png` 不同，後者是滿版，不可拿來當商店圖示） |
 | Screenshot 1 | `store-assets/01-watch-page.png` | 1280×800 ✓ |
 | Screenshot 2 | `store-assets/02-settings-panel.png` | 1280×800 ✓ |
 | Small promo tile | `store-assets/promo-small-440x280.png` | 440×280 ✓ |
 | Marquee promo tile | 未製作 | 1400×560（選填，只有被 Google 選為精選時才用得到） |
 
 重新產生：`bash tools/store-screenshots.sh`（截圖）、`bash tools/build-promo.sh`（宣傳圖）。
+⚠️ `store-icon-128.png` 目前**沒有產生腳本**，是唯一沒有向量單一來源保障的素材，
+改動 `icons/icon.svg` 不會連帶更新它（下次要補進 `build-promo.sh`，見 project_context 待辦）。
 
 ---
 
