@@ -181,6 +181,22 @@ const SIDEBAR_MAX_RATIO = 1.6;
     check('<html lang> 跟著瀏覽器 UI 語系', i18n.htmlLang === i18n.uiLang,
       `html lang="${i18n.htmlLang}" UI="${i18n.uiLang}"`);
 
+    /*
+     * 面板的對外連結必須在白名單內。PRIVACY.md 對使用者承諾「唯一的外部連結是贊助連結」，
+     * 而這種承諾最容易在日後某次「順手加個回饋表單/統計連結」時默默失效 ——
+     * 靜態掃描抓得到 fetch，抓不到一個長得很無辜的 <a href>。
+     */
+    const links = JSON.parse(await panel.eval(`JSON.stringify(
+      [...document.querySelectorAll('a[href]')]
+        .map((a) => a.href)
+        .filter((h) => /^https?:/.test(h))
+    )`));
+    const ALLOWED_HOSTS = ['www.paypal.me'];
+    const unexpected = links.filter((h) => !ALLOWED_HOSTS.includes(new URL(h).host));
+    check('設定面板沒有預期外的對外連結',
+      unexpected.length === 0,
+      `連結：${links.join(', ') || '無'}${unexpected.length ? ` / 非白名單：${unexpected.join(', ')}` : ''}`);
+
     const applyMode = async (mode) => {
       await panel.eval(`new Promise(r => chrome.storage.sync.set({ yt_auto_resizer_settings: ${SETTINGS(mode)} }, r))`);
       await sleep(3000);

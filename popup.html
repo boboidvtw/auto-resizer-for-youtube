@@ -144,8 +144,13 @@
         <span id="status-text"></span>
       </div>
       <div class="sponsor-link">
-        <a href="https://buymeacoffee.com/boboidvtw" target="_blank" rel="noopener noreferrer"
-           data-i18n="sponsor">Buy me a coffee</a>
+        <!--
+          收款一律走 PayPal：Stripe 尚未在台灣開放，所有以 Stripe 為金流的贊助平台
+          （Buy Me a Coffee、GitHub Sponsors、Ko-fi 的 Stripe 選項）台灣都無法提領。
+          PayPal 的限制只在「台灣付款人 -> 台灣收款人」，海外贊助者不受影響。
+        -->
+        <a href="https://www.paypal.me/boboidvtw" target="_blank" rel="noopener noreferrer"
+           data-i18n="sponsor">Support this project</a>
       </div>
     </footer>
   </div>

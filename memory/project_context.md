@@ -22,7 +22,24 @@
    GitHub 認不出授權，與 README 的 MIT 徽章互相矛盾。→ 貼回標準全文。
 
 另補：三語 i18n（en/zh_TW/ja）、PRIVACY.md + 託管頁、CHANGELOG.md、CI、專案首頁。
-贊助由 PayPal 改 Buy Me a Coffee（PayPal 禁台灣賣家對台灣買家收款）。
+
+### 贊助金流：台灣只剩 PayPal 一條路
+
+一度把 PayPal 換成 Buy Me a Coffee，查證後發現那是**退步**（BMC 完全提領不了，
+PayPal 至少海外收得到）。根因是 **Stripe 尚未在台灣開放**：
+
+| 平台 | 台灣可提領 | 依據 |
+|---|---|---|
+| Buy Me a Coffee | ✗ | 官方 50 國清單無台灣（走 Stripe） |
+| GitHub Sponsors | ✗ | 官方 137 個地區清單無台灣 |
+| Ko-fi（Stripe） | ✗ | 同樣卡在 Stripe |
+| Ko-fi（PayPal） | ✓ | Ko-fi 不持有款項，直接進 PayPal |
+| PayPal.me | ✓ | 現行方案 |
+
+**PayPal 的限制要講精確**：被禁的是「台灣付款人 → 台灣收款人」，
+台灣收款人收海外款項沒問題。全球市場的產品不受這條限制實質影響。
+
+文案已改為平台中性（「支持贊助 / Support this project」），日後換金流不必動翻譯檔。
 
 ### 圖示設計的實測教訓
 
@@ -55,8 +72,8 @@ Chrome 工具列實際顯示的就是 16px —— 256 個像素撐不起四個�
 
 ### 待辦
 
-- [ ] **Buy Me a Coffee 帳號要去註冊**。連結已指向 `buymeacoffee.com/boboidvtw`，帳號尚未建立。
-- [ ] 商店素材：1280×800 截圖至少一張、440×280 小型宣傳圖。
+- [x] ~~贊助金流~~ 維持 PayPal（見上方「贊助金流」段落），無須註冊新帳號。
+- [x] ~~商店素材~~ 1280×800 截圖 ×2 與 440×280 宣傳圖已產生，尺寸有 CI 守門。
 - [ ] 上架後把商店連結補進 README、專案首頁與 `bobo-labs` 的 project card。
 
 ---

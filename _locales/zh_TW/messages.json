@@ -7,66 +7,145 @@
     "message": "依畫質、視窗與螢幕解析度自動調整 YouTube 播放器尺寸，支援 4K 與多螢幕，另有彈出式播放器。",
     "description": "Chrome 線上應用程式商店的簡短描述，上限 132 字元。"
   },
-  "actionTitle": { "message": "Auto Resizer 設定" },
-
-  "popupPlayerButton": { "message": "彈出式播放器" },
-
-  "statusEnabled": { "message": "已啟用" },
-  "statusDisabled": { "message": "已停用" },
-  "statusSaveFailed": { "message": "儲存失敗" },
-
-  "sectionQuality": { "message": "預設優先畫質" },
-  "qualityAuto": { "message": "Auto（交給 YouTube 自動判斷）" },
-  "quality2160": { "message": "4K (2160p)" },
-  "quality1440": { "message": "2K (1440p)" },
-  "quality1080": { "message": "Full HD (1080p)" },
-  "quality720": { "message": "HD (720p)" },
-  "quality480": { "message": "SD (480p)" },
+  "actionTitle": {
+    "message": "Auto Resizer 設定"
+  },
+  "popupPlayerButton": {
+    "message": "彈出式播放器"
+  },
+  "statusEnabled": {
+    "message": "已啟用"
+  },
+  "statusDisabled": {
+    "message": "已停用"
+  },
+  "statusSaveFailed": {
+    "message": "儲存失敗"
+  },
+  "sectionQuality": {
+    "message": "預設優先畫質"
+  },
+  "qualityAuto": {
+    "message": "Auto（交給 YouTube 自動判斷）"
+  },
+  "quality2160": {
+    "message": "4K (2160p)"
+  },
+  "quality1440": {
+    "message": "2K (1440p)"
+  },
+  "quality1080": {
+    "message": "Full HD (1080p)"
+  },
+  "quality720": {
+    "message": "HD (720p)"
+  },
+  "quality480": {
+    "message": "SD (480p)"
+  },
   "qualityHint": {
     "message": "選定畫質後，每支新影片會自動鎖定到該畫質；若該影片沒有此畫質，則取可用的最高畫質。"
   },
-
-  "sectionResizeMode": { "message": "播放器尺寸縮放模式" },
-  "modeAutoTitle": { "message": "依畫質自動匹配尺寸" },
-  "modeAutoDesc": { "message": "以影片原生解析度為上限，再收斂到視窗可容納的大小" },
-  "modeFitTitle": { "message": "強制視窗貼合" },
-  "modeFitDesc": { "message": "不論畫質一律撐滿視窗可用空間" },
-  "modeTheaterTitle": { "message": "強制劇院模式" },
-  "modeTheaterDesc": { "message": "播放器滿寬，推薦影片移到下方" },
-  "modeDefaultTitle": { "message": "預設小圖" },
-  "modeDefaultDesc": { "message": "維持 YouTube 原生尺寸" },
-
-  "sectionDisplay": { "message": "螢幕適配" },
-  "displayDetecting": { "message": "偵測顯示器中…" },
-  "displayUnavailable": { "message": "無法取得顯示器資訊" },
+  "sectionResizeMode": {
+    "message": "播放器尺寸縮放模式"
+  },
+  "modeAutoTitle": {
+    "message": "依畫質自動匹配尺寸"
+  },
+  "modeAutoDesc": {
+    "message": "以影片原生解析度為上限，再收斂到視窗可容納的大小"
+  },
+  "modeFitTitle": {
+    "message": "強制視窗貼合"
+  },
+  "modeFitDesc": {
+    "message": "不論畫質一律撐滿視窗可用空間"
+  },
+  "modeTheaterTitle": {
+    "message": "強制劇院模式"
+  },
+  "modeTheaterDesc": {
+    "message": "播放器滿寬，推薦影片移到下方"
+  },
+  "modeDefaultTitle": {
+    "message": "預設小圖"
+  },
+  "modeDefaultDesc": {
+    "message": "維持 YouTube 原生尺寸"
+  },
+  "sectionDisplay": {
+    "message": "螢幕適配"
+  },
+  "displayDetecting": {
+    "message": "偵測顯示器中…"
+  },
+  "displayUnavailable": {
+    "message": "無法取得顯示器資訊"
+  },
   "displayCurrent": {
     "message": "$LABEL$（目前）",
-    "placeholders": { "label": { "content": "$1", "example": "內建 1710×1107 @2x" } }
+    "placeholders": {
+      "label": {
+        "content": "$1",
+        "example": "內建 1710×1107 @2x"
+      }
+    }
   },
-  "displayAwareQuality": { "message": "依螢幕解析度自動提升畫質" },
-  "ceilingAriaLabel": { "message": "自動畫質上限" },
-  "ceiling2160": { "message": "自動畫質上限：4K (2160p)" },
-  "ceiling1440": { "message": "自動畫質上限：2K (1440p)" },
-  "ceiling1080": { "message": "自動畫質上限：Full HD (1080p)" },
-  "ceiling720": { "message": "自動畫質上限：HD (720p)" },
+  "displayAwareQuality": {
+    "message": "依螢幕解析度自動提升畫質"
+  },
+  "ceilingAriaLabel": {
+    "message": "自動畫質上限"
+  },
+  "ceiling2160": {
+    "message": "自動畫質上限：4K (2160p)"
+  },
+  "ceiling1440": {
+    "message": "自動畫質上限：2K (1440p)"
+  },
+  "ceiling1080": {
+    "message": "自動畫質上限：Full HD (1080p)"
+  },
+  "ceiling720": {
+    "message": "自動畫質上限：HD (720p)"
+  },
   "displayHint": {
     "message": "依「播放器寬度 × 螢幕像素密度」推算需要的畫質。只有在影片本身沒有更高畫質時，才會超過原生解析度放大來填滿畫面。設為「自動」以外的預設優先畫質時，一律以你指定的為準。"
   },
-
-  "sectionPopupTarget": { "message": "彈出播放器開啟位置" },
-  "popupFollow": { "message": "跟隨目前視窗所在的螢幕" },
-  "popupLargest": { "message": "一律開在最大的螢幕" },
-  "popupInternal": { "message": "一律開在內建螢幕" },
-
-  "removeSideGaps": { "message": "自動消除播放器兩側留白區" },
-  "resizeMainWindow": { "message": "同步調整瀏覽器視窗尺寸" },
-
-  "tierUhd": { "message": "4K" },
-  "tierHidpi": { "message": "HiDPI" },
-  "tierStandard": { "message": "一般" },
-
-  "sponsor": { "message": "請我喝杯咖啡" },
-
-  "displayLabelInternal": { "message": "內建" },
-  "displayLabelExternal": { "message": "外接" }
+  "sectionPopupTarget": {
+    "message": "彈出播放器開啟位置"
+  },
+  "popupFollow": {
+    "message": "跟隨目前視窗所在的螢幕"
+  },
+  "popupLargest": {
+    "message": "一律開在最大的螢幕"
+  },
+  "popupInternal": {
+    "message": "一律開在內建螢幕"
+  },
+  "removeSideGaps": {
+    "message": "自動消除播放器兩側留白區"
+  },
+  "resizeMainWindow": {
+    "message": "同步調整瀏覽器視窗尺寸"
+  },
+  "tierUhd": {
+    "message": "4K"
+  },
+  "tierHidpi": {
+    "message": "HiDPI"
+  },
+  "tierStandard": {
+    "message": "一般"
+  },
+  "sponsor": {
+    "message": "支持贊助"
+  },
+  "displayLabelInternal": {
+    "message": "內建"
+  },
+  "displayLabelExternal": {
+    "message": "外接"
+  }
 }

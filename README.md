@@ -167,7 +167,7 @@ SCREEN=uhd bash tests/run-e2e.sh      # 外接 4K 螢幕，35 項檢查（含 4K
 
 ## ☕ 贊助 (Sponsor)
 
-如果這東西對你有用，可以[請我喝杯咖啡](https://buymeacoffee.com/boboidvtw)。
+如果這東西對你有用，可以[請我喝杯咖啡](https://www.paypal.me/boboidvtw)。
 
 ## 📄 授權 (License)
 

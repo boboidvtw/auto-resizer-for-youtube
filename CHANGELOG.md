@@ -43,8 +43,11 @@ Chrome Web Store 上架的硬性要求，其中三項原本會直接被退件。
 - **`LICENSE` 的 MIT 免責條款被改壞**。原文誤植為 `MECHANICAL FOR A PARTICULAR PURPOSE`，
   正確應為 `MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE` —— 「適售性擔保」的排除條款整段不見了。
   後果不只是理論問題：GitHub 的授權偵測因此認不出 MIT，repo 頁面顯示 `Other`，與 README 的 MIT 徽章互相矛盾。
-- **贊助連結由 PayPal 改為 Buy Me a Coffee**。PayPal 禁止台灣賣家對台灣買家收款，
-  對主要客群而言那顆按鈕點下去必然失敗。
+- **贊助連結文案改為平台中性**（「支持贊助 / Support this project」），連結維持 PayPal。
+  一度改為 Buy Me a Coffee 後查證發現：**Stripe 尚未在台灣開放**，凡以 Stripe 為金流的
+  贊助平台（Buy Me a Coffee 的 50 國清單、GitHub Sponsors 的 137 個地區）台灣都無法提領。
+  PayPal 的限制其實只在「台灣付款人 → 台灣收款人」，海外贊助者不受影響 ——
+  對全球市場的擴充功能而言，PayPal 是目前唯一收得到錢的選項。
 - 彈出播放器按鈕補上 `aria-label`（原本只有 `title`）。
 
 ### Security / Privacy

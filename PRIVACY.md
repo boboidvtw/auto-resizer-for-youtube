@@ -32,7 +32,7 @@ grep -rniE "fetch\(|XMLHttpRequest|https?://" --include="*.js" --include="*.html
 ```
 
 唯一的兩筆命中是 `https://www.youtube.com/watch?v=...`（開啟彈出式播放器用的網址）
-與設定面板底部指向 Buy Me a Coffee 的贊助連結。
+與設定面板底部指向 PayPal 的贊助連結。
 
 ### 二、本擴充功能儲存了什麼
 
@@ -52,7 +52,7 @@ grep -rniE "fetch\(|XMLHttpRequest|https?://" --include="*.js" --include="*.html
 
 不使用任何第三方服務、SDK、分析工具或廣告聯播網，也不會與任何第三方分享資料 —— 因為根本沒有資料可以分享。
 
-設定面板底部的 Buy Me a Coffee 贊助連結是一般的外部連結，點擊後才會離開瀏覽器前往該網站，
+設定面板底部的 PayPal 贊助連結是一般的外部連結，點擊後才會離開瀏覽器前往該網站，
 並適用該網站自己的隱私權政策。不點就不會有任何連線發生。
 
 ### 五、兒童隱私
@@ -100,7 +100,7 @@ Google account. The developer cannot access them. Removing the extension deletes
 ### 4. Third parties
 
 No third-party services, SDKs, or analytics are used, and no data is shared with anyone — there is
-none to share. The settings panel contains one ordinary outbound link to Buy Me a Coffee; no request
+none to share. The settings panel contains one ordinary outbound link to PayPal; no request
 is made unless you click it.
 
 ### 5. Children's privacy
