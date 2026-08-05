@@ -149,7 +149,7 @@ Chrome Web Store 上架的硬性要求，其中三項原本會直接被退件。
 
 ---
 
-[3.0.0]: https://github.com/boboidvtw/youtube-auto-resizer-extension/releases/tag/v3.0.0
-[2.3.0]: https://github.com/boboidvtw/youtube-auto-resizer-extension/releases/tag/v2.3.0
-[2.2.0]: https://github.com/boboidvtw/youtube-auto-resizer-extension/releases/tag/v2.2.0
-[2.1.0]: https://github.com/boboidvtw/youtube-auto-resizer-extension/releases/tag/v2.1.0
+[3.0.0]: https://github.com/boboidvtw/auto-resizer-for-youtube/releases/tag/v3.0.0
+[2.3.0]: https://github.com/boboidvtw/auto-resizer-for-youtube/releases/tag/v2.3.0
+[2.2.0]: https://github.com/boboidvtw/auto-resizer-for-youtube/releases/tag/v2.2.0
+[2.1.0]: https://github.com/boboidvtw/auto-resizer-for-youtube/releases/tag/v2.1.0

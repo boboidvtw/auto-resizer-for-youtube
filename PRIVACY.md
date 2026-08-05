@@ -66,7 +66,7 @@ grep -rniE "fetch\(|XMLHttpRequest|https?://" --include="*.js" --include="*.html
 ### 七、聯絡方式
 
 <boboidvtw+labs@gmail.com> 或
-[GitHub Issues](https://github.com/boboidvtw/youtube-auto-resizer-extension/issues)。
+[GitHub Issues](https://github.com/boboidvtw/auto-resizer-for-youtube/issues)。
 
 ---
 
@@ -114,7 +114,7 @@ Changes update the date at the top of this file and are recorded in [CHANGELOG.m
 ### 7. Contact
 
 <boboidvtw+labs@gmail.com> or
-[GitHub Issues](https://github.com/boboidvtw/youtube-auto-resizer-extension/issues).
+[GitHub Issues](https://github.com/boboidvtw/auto-resizer-for-youtube/issues).
 
 ---
 

@@ -4,7 +4,7 @@
 > Resize the YouTube player to fit your window, quality and **display**, lock playback quality, and pop the video out
 > onto the screen you choose — 4K and multi-monitor aware, Manifest V3.
 
-[![CI](https://github.com/boboidvtw/youtube-auto-resizer-extension/actions/workflows/test.yml/badge.svg)](https://github.com/boboidvtw/youtube-auto-resizer-extension/actions/workflows/test.yml)
+[![CI](https://github.com/boboidvtw/auto-resizer-for-youtube/actions/workflows/test.yml/badge.svg)](https://github.com/boboidvtw/auto-resizer-for-youtube/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-brightgreen.svg)](https://developer.chrome.com/docs/extensions/mv3/intro/)
 [![i18n](https://img.shields.io/badge/i18n-en%20%7C%20zh__TW%20%7C%20ja-blue.svg)](_locales)
@@ -77,7 +77,7 @@ grep -rniE "fetch\(|XMLHttpRequest|https?://" --include="*.js" --include="*.html
 Chrome 線上應用程式商店審核中。目前請以開發者模式載入：
 
 ```bash
-git clone https://github.com/boboidvtw/youtube-auto-resizer-extension.git
+git clone https://github.com/boboidvtw/auto-resizer-for-youtube.git
 ```
 
 1. 開啟 `chrome://extensions`
@@ -89,7 +89,7 @@ git clone https://github.com/boboidvtw/youtube-auto-resizer-extension.git
 ## 📁 架構 (Architecture)
 
 ```
-youtube-auto-resizer-extension/
+auto-resizer-for-youtube/
 ├── manifest.json      # Manifest V3
 ├── _locales/          # en / zh_TW / ja 三語字串
 ├── background.js      # Service worker：設定供應、視窗調整、彈出播放器
@@ -146,8 +146,9 @@ youtube-auto-resizer-extension/
 node --test tests/*.test.js
 ```
 
-70 條，涵蓋設定正規化、版面 CSS 產生器、視窗尺寸計算、service worker 的 URL 驗證，
-以及 `_locales` 的翻譯一致性（key 集合、placeholder、商店長度上限、孤兒 key）。
+74 條，涵蓋設定正規化、版面 CSS 產生器、視窗尺寸計算、service worker 的 URL 驗證、
+`_locales` 的翻譯一致性（key 集合、placeholder、商店長度上限、孤兒 key），
+以及商店圖示的留白規格（以 manifest 的滿版圖示為對照組）。
 
 **端到端測試**（真實載入的擴充功能 + 真實 YouTube + 真實彈出視窗）：
 

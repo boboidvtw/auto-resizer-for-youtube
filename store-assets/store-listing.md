@@ -30,7 +30,7 @@
 | **Category** | `Productivity`（次選 `Photos & Video`。功能是改善觀看效率，Productivity 較貼近，且該分類審核基調較寬） |
 | **Language** | `English (United States)` — 對應 manifest 的 `default_locale: "en"` |
 | **Official URL / Homepage** | `https://labs.moneyai168.com/projects/auto-resizer-for-youtube/` |
-| **Support URL** | `https://github.com/boboidvtw/youtube-auto-resizer-extension/issues` |
+| **Support URL** | `https://github.com/boboidvtw/auto-resizer-for-youtube/issues` |
 | **Mature content** | 否 |
 | **Pricing** | Free |
 | **Visibility** | Public |
@@ -107,7 +107,7 @@ Full policy: https://labs.moneyai168.com/projects/auto-resizer-for-youtube/priva
 OPEN SOURCE
 
 MIT licensed. Source, tests and issue tracker:
-https://github.com/boboidvtw/youtube-auto-resizer-extension
+https://github.com/boboidvtw/auto-resizer-for-youtube
 
 ---
 
@@ -151,7 +151,7 @@ YouTube 的播放器只會長到它自己想要的大小。1600px 的視窗上�
 開放原始碼
 
 MIT 授權。原始碼、測試與問題回報：
-https://github.com/boboidvtw/youtube-auto-resizer-extension
+https://github.com/boboidvtw/auto-resizer-for-youtube
 
 ---
 
@@ -198,7 +198,7 @@ https://labs.moneyai168.com/projects/auto-resizer-for-youtube/privacy.html
 オープンソース
 
 MIT ライセンス。ソースコード・テスト・不具合報告：
-https://github.com/boboidvtw/youtube-auto-resizer-extension
+https://github.com/boboidvtw/auto-resizer-for-youtube
 
 ---
 
