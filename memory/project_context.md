@@ -31,9 +31,33 @@ repo 內零寫死絕對路徑（`tests/run-e2e.sh` 用 `BASH_SOURCE`、`tests/e2
 
 ---
 
-**下一步只剩一件事：把 `dist/auto-resizer-for-youtube-v3.0.0.zip` 上傳到 Chrome Web Store。**
-填表逐欄的對照文字在 `store-assets/store-listing.md`（含三語 description、single purpose
-說明、每個權限的 justification）。
+## 📮 2026-08-05 已送審（待審查）
+
+`dist/auto-resizer-for-youtube-v3.0.0.zip` 已上傳 Chrome Web Store，Developer Dashboard
+狀態為**待審查**。填表逐欄的對照文字保留在 `store-assets/store-listing.md`
+（三語 description、single purpose 說明、每個權限的 justification）——
+**被退件後修正重傳時要照著改，並且 `manifest.json` 的 version 必須往上加**
+（同一版號只能上傳一次），CI 會檢查 CHANGELOG 有對應段落。
+
+### 改名後的 e2e 複驗（新路徑，2026-08-05）
+
+`bash tests/run-e2e.sh` → **36/36 通過**。關鍵證據是 service worker 的位址：
+`chrome-extension://jnjcoahpgokbiggnjpbhpmpjgcfpiacm/background.js` ——
+正是新路徑算出來的 ID，證明跑的是改名後的目錄而不是殘留的舊安裝。
+
+| 項目 | 實測 |
+|---|---|
+| 對照組放大幅度 | 原生 1112x626 → 自動 1392x783（**+25.2%**） |
+| 垂直剩餘 | 80px / 863px |
+| 橫向溢出 | 無（scrollW 1600 = viewport 1600） |
+| i18n | 32 個 `data-i18n` 節點皆有文字，來源確為 `chrome.i18n` |
+| 名稱斷言 | `Auto Resizer for YouTube™`，不以 YouTube 開頭 |
+| 版本徽章 | v3.0.0 = manifest |
+| 彈出視窗 | 黑邊 0x0、長寬比 1.781（基準 1.778）、開在正確螢幕 |
+| 螢幕偵測 | 兩台皆可見（內建 1710x1107 + 4K 3840x2160@1710） |
+
+⚠️ README 原本寫「內建螢幕 29 項」是 v2.3.0 的舊數字，v3.0.0 加了 i18n 的 e2e 檢查後
+沒回頭更新，已改為 36。
 
 ---
 

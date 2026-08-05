@@ -153,8 +153,8 @@ node --test tests/*.test.js
 **端到端測試**（真實載入的擴充功能 + 真實 YouTube + 真實彈出視窗）：
 
 ```bash
-bash tests/run-e2e.sh                 # 內建螢幕，29 項檢查
-SCREEN=uhd bash tests/run-e2e.sh      # 外接 4K 螢幕，35 項檢查（含 4K 專屬門檻）
+bash tests/run-e2e.sh                 # 內建螢幕，36 項檢查
+SCREEN=uhd bash tests/run-e2e.sh      # 外接 4K 螢幕（含 4K 專屬門檻）
 ```
 
 會自動啟動獨立的 Brave 實例、載入本擴充功能，驗證設定面板、放大幅度、兩欄／劇院／彈出視窗後關閉。
