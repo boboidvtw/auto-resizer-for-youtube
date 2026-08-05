@@ -41,20 +41,25 @@ jobs:
             exit 1
           }
 
+      - name: 打包清單完整，且不含開發用檔案
+        run: bash tools/package.sh
+
       - name: 擴充功能不得含有對外連線
         run: |
           # 這條守的是隱私承諾本身。PRIVACY.md 宣稱「沒有任何對外連線」，
           # 而承諾若沒有守門，總有一天會在某次「順手加個統計」時默默失效。
-          # 用 --exclude-dir 而不是事後 grep -v 過濾路徑：grep 的輸出前綴帶不帶 "./"
-          # 隨實作而異，靠字串過濾會安靜地失準（本機實測就誤報過一次）。
-          hits=$(grep -rnoE "fetch\(|XMLHttpRequest|navigator\.sendBeacon" \
-            --include="*.js" --include="*.html" --exclude-dir=tests . || true)
+          #
+          # 掃描範圍取自 tools/package.sh 的 SHIP 清單，也就是真正會進 zip 的檔案。
+          # 不能掃整個 repo：tests/ 與 tools/ 都合法地用 fetch 驅動 CDP，
+          # 那些不會被打包，掃它們只會製造假警報（本次 CI 就誤報過一次）。
+          files=$(bash tools/package.sh --list | grep -E '\.(js|html)$' || true)
+          hits=$(echo "$files" | xargs grep -nE "fetch\(|XMLHttpRequest|navigator\.sendBeacon" || true)
           if [ -n "$hits" ]; then
-            echo "::error::發現對外連線的呼叫，與 PRIVACY.md 的承諾牴觸："
+            echo "::error::打包檔案裡發現對外連線的呼叫，與 PRIVACY.md 的承諾牴觸："
             echo "$hits"
             exit 1
           fi
-          echo "確認無對外連線呼叫"
+          echo "確認 $(echo "$files" | wc -l | tr -d ' ') 個打包檔案中無對外連線呼叫"
 
       - name: manifest 宣告的圖示都要存在，且尺寸正確
         run: |

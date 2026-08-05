@@ -16,3 +16,4 @@ check_*.js
 click_*.js
 reload_*.js
 scroll_*.js
+dist/

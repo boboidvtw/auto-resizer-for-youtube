@@ -114,6 +114,10 @@ youtube-auto-resizer-extension/
 
 **圖示**：改 `icons/icon.svg` 後跑 `bash icons/build.sh` 重新產生四個 PNG，四種尺寸因此不可能彼此漂移。
 
+**打包上架**：`bash tools/package.sh` 產生 `dist/auto-resizer-for-youtube-v<版本>.zip`。
+該腳本裡的 `SHIP` 清單是「什麼算是擴充功能本體」的單一真相來源，CI 也用同一份清單
+決定隱私掃描的範圍。手動 zip 整個資料夾會把 `tests/`、`tools/`、`memory/` 一起送去給審核員看。
+
 **商店素材**：`bash tools/store-screenshots.sh` 會啟動一個載入本擴充功能的 Brave 實例，
 對真實 YouTube 截出 1280×800 的商店截圖。截圖前會先斷言樣式確實套用、影片確實在播放 ——
 少了這一關，樣式沒生效時產出的會是一組「YouTube 原生版面」的截圖，看起來很正常，
