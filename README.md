@@ -102,6 +102,8 @@ youtube-auto-resizer-extension/
 ├── pageScript.js      # 主世界：透過原生 player API 設定畫質
 ├── popup.html/js/css  # 設定面板
 ├── tests/             # 零相依測試（node:test + node:vm）
+├── tools/             # 商店素材產生器（真實載入擴充功能後截圖）
+├── store-assets/      # 1280×800 商店截圖
 └── icons/
     ├── icon.svg       # 單一向量來源
     └── build.sh       # 產生 16/32/48/128 PNG（需 rsvg-convert）
@@ -111,6 +113,11 @@ youtube-auto-resizer-extension/
 主世界對同一支影片只廣播一次狀態，隔離世界可透過 `YT_AUTO_RESIZER_REQUEST_STATE` 事件要求重播。
 
 **圖示**：改 `icons/icon.svg` 後跑 `bash icons/build.sh` 重新產生四個 PNG，四種尺寸因此不可能彼此漂移。
+
+**商店素材**：`bash tools/store-screenshots.sh` 會啟動一個載入本擴充功能的 Brave 實例，
+對真實 YouTube 截出 1280×800 的商店截圖。截圖前會先斷言樣式確實套用、影片確實在播放 ——
+少了這一關，樣式沒生效時產出的會是一組「YouTube 原生版面」的截圖，看起來很正常，
+但宣傳的是我們沒做到的事。
 
 ---
 
