@@ -14,15 +14,23 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # 20 是目前的 LTS 下限，24 是新版。`--test` 對路徑參數的行為在版本之間變過，
+        # 跑兩個版本才擋得住「本機這版能跑、CI 那版不能」。
+        node-version: ['20', '24']
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ matrix.node-version }}
 
       - name: 單元測試（含 _locales 一致性）
-        run: node --test "tests/*.test.js"
+        # glob 刻意不加引號，交給 shell 展開成實際檔案清單。
+        # 加引號的話等於把 glob 原樣丟給 node：Node 20 當成字面路徑找不到檔案，
+        # Node 26 又會把 `tests/` 當模組去 require —— 兩種版本兩種壞法（都實測過）。
+        run: node --test tests/*.test.js
 
       - name: manifest.json 必須是合法 JSON，且版本號與 CHANGELOG 對得上
         run: |

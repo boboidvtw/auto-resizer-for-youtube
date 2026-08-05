@@ -119,7 +119,7 @@ youtube-auto-resizer-extension/
 **單元測試**（零相依，Node 內建 test runner + `vm`）：
 
 ```bash
-node --test "tests/*.test.js"
+node --test tests/*.test.js
 ```
 
 70 條，涵蓋設定正規化、版面 CSS 產生器、視窗尺寸計算、service worker 的 URL 驗證，
