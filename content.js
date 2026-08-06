@@ -2,8 +2,12 @@
  * content.js — 隔離世界主控：設定、樣式套用、主世界腳本注入、控制列按鈕
  * Isolated-world orchestrator.
  *
- * Updated: 2026-08-02
- * 依賴 (depends on): src/config.js, src/layout.js（由 manifest 依序注入）
+ * Updated: 2026-08-06
+ * 依賴 (depends on): src/config.js, src/display.js, src/layout.js,
+ *                    src/quality-policy.js, src/window-fit.js（由 manifest 依序注入）
+ *
+ * 分工：凡是「算得出答案」的部分都住在 src/ 底下的純函式模組，本檔只負責 DOM、chrome API、
+ * 主世界訊息與狀態的編排。這條界線是刻意的——留在這裡的東西一律只能靠開瀏覽器驗證。
  */
 
 (function () {
@@ -15,8 +19,6 @@
   const BUTTON_RETRY_INTERVAL_MS = 500;
   const BUTTON_MAX_RETRIES = 20;
   const POPUP_MAX_CALIBRATIONS = 8;
-  /** 收斂容差：視窗尺寸有系統粒度，硬要逼到 1px 只會換來無效重試 */
-  const POPUP_CALIBRATION_TOLERANCE_PX = 8;
   /**
    * 降畫質要等它穩定才縮小播放器。YouTube 的 ABR 幾乎每支影片開播都是由低往上爬
    * （medium -> hd720 -> hd1080），中途也會因網路抖動短暫掉下來；照單全收的話
@@ -118,49 +120,20 @@
    * macOS 上該 API 的 dpiX/dpiY 實測恆為 0（2026-08-04 雙螢幕實測），只提供邏輯座標。
    * 唯一拿得到 DPR 的地方就是 content script 自己，而且只涵蓋視窗目前所在那一台螢幕 ——
    * 這正好就是我們要的：畫質該多高，取決於使用者現在正在看的那台。
+   *
+   * 決策本身住在 src/quality-policy.js；本檔只負責把「現在的狀態」收集起來交給它。
    */
 
-  /**
-   * 這台螢幕能讓播放器長到多大（CSS px）。
-   * 刻意帶 allowUpscale=true：問的是「螢幕的容量」，不該被目前畫質的原生寬度反過來限制，
-   * 否則會變成「因為現在是 1080p，所以只需要 1080p」的自我實現迴圈。
-   */
-  function displayCeilingWidth() {
-    return yarPlayerWidthFor(
-      settings,
-      lastQuality || 'hd1080',
-      window.innerWidth,
-      window.innerHeight,
-      { allowUpscale: true }
-    );
-  }
-
-  /** 依螢幕實體像素（CSS 寬 × DPR）算出應該要的畫質；未啟用時回傳 null */
-  function desiredQualityForDisplay() {
-    if (!settings.enabled || !settings.displayAwareQuality) return null;
-    if (settings.resizeMode === 'default' || isPopupPlayerWindow()) return null;
-    const ceiling = displayCeilingWidth();
-    if (!ceiling) return null;
-    return yarQualityForPlayer(ceiling, window.devicePixelRatio, settings.autoQualityCeiling);
-  }
-
-  /**
-   * 判斷「影片最高能給到哪」時可用的清單。
-   * 使用者手動指定畫質時，那個畫質就是實質上限 —— 此時若螢幕還有餘裕，
-   * 放大是唯一能填滿畫面的辦法（使用者選的策略是「畫質優先、不夠才放大」）。
-   */
-  function effectiveAvailableQualities() {
-    if (settings.preferredQuality !== 'auto') {
-      const pinned = YAR_QUALITY_ALIAS[settings.preferredQuality];
-      return pinned && pinned !== 'auto' ? [pinned] : availableQualities;
-    }
-    return availableQualities;
-  }
-
-  /** 版面情境：只有「已是影片最高畫質仍填不滿螢幕」時才允許超過原生解析度放大 */
-  function layoutContext() {
+  /** 把散落的模組層級狀態收成一份快照，交給 quality-policy.js 的純函式 */
+  function displayState() {
     return {
-      allowUpscale: yarShouldUpscale(desiredQualityForDisplay(), effectiveAvailableQualities())
+      quality: lastQuality,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      dpr: window.devicePixelRatio,
+      isPopupPlayer: isPopupPlayerWindow(),
+      availableQualities,
+      videoWidth: lastVideoW,
+      videoHeight: lastVideoH
     };
   }
 
@@ -174,7 +147,8 @@
       getStyleElement().textContent = yarBuildPopupPlayerCss();
       return;
     }
-    const css = yarBuildPlayerCss(settings, lastQuality || 'hd1080', layoutContext());
+    const context = yarLayoutContextFor(settings, displayState());
+    const css = yarBuildPlayerCss(settings, lastQuality || YAR_CEILING_PROBE_QUALITY, context);
     getStyleElement().textContent = css;
     yarLog('已套用版面', settings.resizeMode, lastQuality, css ? '' : '(已清空)');
   }
@@ -245,7 +219,7 @@
     if (settings.preferredQuality !== 'auto') {
       target = settings.preferredQuality;
     } else {
-      const code = desiredQualityForDisplay();
+      const code = yarDesiredQualityForDisplay(settings, displayState());
       target = code ? yarQualityAliasFor(code) : null;
     }
     if (!target) return;
@@ -322,58 +296,29 @@
 
   // ------------------------------------------------------- 瀏覽器視窗同步
 
-  /**
-   * 實測視窗外框（標題列、分頁列、網址列…）佔掉的尺寸。
-   * 這個值無法事先猜：一般視窗有分頁列與網址列（實測 171px），彈出視窗只有標題列，
-   * 而且隨平台與瀏覽器而異。猜錯的直接後果就是內容區不是 16:9、影片上下或左右出現黑邊。
-   * @returns {{width: number, height: number}|null} 尚未量得可信值時回傳 null
-   */
+  /** 量目前這個視窗的外框；計算與退路規則見 src/window-fit.js */
   function measuredWindowChrome() {
-    const extraWidth = window.outerWidth - window.innerWidth;
-    const extraHeight = window.outerHeight - window.innerHeight;
-    if (!Number.isFinite(extraWidth) || !Number.isFinite(extraHeight)) return null;
-    if (extraWidth < 0 || extraHeight <= 0) return null;
-    return { width: extraWidth, height: extraHeight };
-  }
-
-  /** 影片實際長寬比；取不到時退回 16:9 */
-  function currentAspectRatio() {
-    if (lastVideoW > 0 && lastVideoH > 0) return lastVideoW / lastVideoH;
-    return 16 / 9;
+    return yarWindowChromeFrom(
+      window.outerWidth, window.innerWidth,
+      window.outerHeight, window.innerHeight
+    );
   }
 
   /**
-   * 組出「視窗尺寸請求」交給 service worker 去算。
+   * 組出「視窗尺寸請求」交給 service worker 去算最終尺寸（計算核心在 src/window-fit.js）。
    *
-   * 這裡刻意**不**碰 `window.screen.avail*`。實測（2026-08-04，Brave，同一實例同一時刻）：
-   *   YouTube 頁面          screen 1680x1050、screenX 8   ← 被指紋防護竄改
-   *   擴充功能 service worker  chrome.system.display 1710x1107 與 3840x2160  ← 真值
-   * 也就是說頁面端量到的螢幕尺寸是假的。在單螢幕上誤差還小，但要替 3840x2160 的外接
-   * 螢幕算視窗時，用被竄改成 1680 的數字會算出一個小一半的視窗。
-   * 真正知道螢幕的是 service worker，因此由它負責夾擠與定位，這裡只提供內容需求。
-   *
-   * @returns {{playerWidth:number, extraWidth:number, extraHeight:number, aspectRatio:number}}
+   * 這裡唯一的判斷是「量到的外框適不適用」：主視窗替尚未存在的彈出視窗算尺寸時，
+   * 量到的是主視窗的分頁列與網址列，套用在彈出視窗上會整個算錯，只能先用估計值，
+   * 待彈出視窗自己載入後再由閉環校正修正。
    */
   function windowFitRequest(isPopup) {
-    const playerWidth = YAR_QUALITY_WIDTH[lastQuality] || YAR_QUALITY_WIDTH.hd1080;
-    // 實測值只在「要調整的視窗就是自己」時才適用。主視窗替尚未存在的彈出視窗算尺寸時，
-    // 量到的是主視窗的分頁列與網址列，套用在彈出視窗上會整個算錯，只能先用估計值，
-    // 待彈出視窗自己載入後再校正。
-    const measured = isPopup === isPopupPlayerWindow() ? measuredWindowChrome() : null;
-
-    // 一般視窗：側欄不再固定佔住播放器右側（放不下就換行到下方，見 layout.js 的
-    // yarColumnsCss），所以只需扣掉頁面內距與捲軸，與 CSS 的寬度運算式同一套假設。
-    const contentExtraWidth = isPopup ? 0 : yarReservePageWidth(settings.removeSideGaps);
-    const fallbackChromeHeight = isPopup
-      ? YAR_LAYOUT.POPUP_CHROME_HEIGHT
-      : YAR_LAYOUT.MASTHEAD_HEIGHT + YAR_LAYOUT.WINDOW_CHROME_HEIGHT;
-
-    return {
-      playerWidth,
-      extraWidth: contentExtraWidth + (measured ? measured.width : 0),
-      extraHeight: measured ? measured.height : fallbackChromeHeight,
-      aspectRatio: currentAspectRatio()
-    };
+    return yarBuildFitRequest(settings, {
+      quality: lastQuality,
+      isPopup,
+      measuredChrome: isPopup === isPopupPlayerWindow() ? measuredWindowChrome() : null,
+      videoWidth: lastVideoW,
+      videoHeight: lastVideoH
+    });
   }
 
   /**
@@ -405,64 +350,44 @@
   }
 
   /**
-   * 彈出視窗的閉環尺寸校正。
-   *
-   * 不用「預測」的方式算視窗尺寸：實際拿到的尺寸會被一堆量不到的因素影響
-   * （macOS 選單列、Dock、瀏覽器對視窗尺寸的下限）。實測就發生過要求 952 高
-   * 卻只拿到 927 的情形，內容區因此不是 16:9，播放器左右仍留黑邊。
-   *
-   * 改成用「目前實際的內容區」反推修正量，多跑幾輪自然收斂：
-   * 先試著調高度；若偵測到高度已被系統限制住，就改縮寬度來符合比例。
+   * 彈出視窗的閉環尺寸校正：量實際內容區 → 交給 yarPopupCalibrationTarget 算下一步 → 送出。
+   * 幾何與「受限後只能送寬度」的不變量都在 src/window-fit.js；本函式只負責量測、記錄與傳送。
    */
   function calibratePopupWindow() {
     if (!isPopupPlayerWindow()) return;
     if (popupCalibrations >= POPUP_MAX_CALIBRATIONS) return;
     if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) return;
 
-    const innerW = window.innerWidth;
-    const innerH = window.innerHeight;
-    if (innerW < 1 || innerH < 1) return;
-
-    const chromeW = window.outerWidth - innerW;
-    const chromeH = window.outerHeight - innerH;
-    const aspect = currentAspectRatio();
-
-    /*
-     * 高度受限必須是「單向」判斷。曾經每輪重新判斷，結果縮寬那一輪的高度要求剛好等於
-     * 目前高度、必然達成，下一輪就誤認為限制解除又去加高，兩個狀態無限震盪，
-     * 視窗還會每輪微幅長大。系統加的限制不會消失，記住即可。
-     */
-    if (lastRequestedOuter && window.outerHeight < lastRequestedOuter.height - 2) {
+    // 受限是單向狀態：一旦成立就永久記住，不可以每輪重問（否則兩狀態無限震盪、視窗還會長大）
+    if (!popupHeightCapped && lastRequestedOuter
+      && yarWindowHeightWasCapped(lastRequestedOuter.height, window.outerHeight)) {
       popupHeightCapped = true;
     }
 
-    const targetInnerW = popupHeightCapped ? Math.round(innerH * aspect) : innerW;
-    const targetInnerH = popupHeightCapped ? innerH : Math.round(innerW / aspect);
+    const innerW = window.innerWidth;
+    const innerH = window.innerHeight;
+    const target = yarPopupCalibrationTarget({
+      innerWidth: innerW,
+      innerHeight: innerH,
+      chromeWidth: window.outerWidth - innerW,
+      chromeHeight: window.outerHeight - innerH,
+      aspectRatio: yarAspectRatioOf(lastVideoW, lastVideoH),
+      heightCapped: popupHeightCapped
+    });
+    if (!target) return;
 
-    if (
-      Math.abs(targetInnerW - innerW) < POPUP_CALIBRATION_TOLERANCE_PX &&
-      Math.abs(targetInnerH - innerH) < POPUP_CALIBRATION_TOLERANCE_PX
-    ) {
-      return;
-    }
-
-    const size = { width: targetInnerW + chromeW, height: targetInnerH + chromeH };
-    lastRequestedOuter = size;
-    lastSentWindowSize = `${size.width}x${size.height}`;
+    lastRequestedOuter = { width: target.width, height: target.height };
+    lastSentWindowSize = `${target.width}x${target.height}`;
     popupCalibrations += 1;
 
-    /*
-     * 高度受限後絕對不能再送 height：系統每次都會再截掉一個選單列的高度
-     * （實測要求 900 只拿到 875），連送幾輪視窗就一路縮小。只調寬度即可收斂。
-     */
-    const payload = { action: YAR_MSG.RESIZE_WINDOW, width: size.width };
-    if (!popupHeightCapped) payload.height = size.height;
+    const payload = { action: YAR_MSG.RESIZE_WINDOW, width: target.width };
+    if (!target.heightCapped) payload.height = target.height;
 
     chrome.runtime.sendMessage(payload, () => void chrome.runtime.lastError);
     yarLog(
       '彈出視窗校正',
-      `${innerW}x${innerH} -> 內容 ${targetInnerW}x${targetInnerH}`,
-      popupHeightCapped ? '(高度受限，改縮寬)' : ''
+      `${innerW}x${innerH} -> 內容 ${target.innerWidth}x${target.innerHeight}`,
+      target.heightCapped ? '(高度受限，改縮寬)' : ''
     );
   }
 
@@ -475,15 +400,9 @@
 
   // ------------------------------------------------ 主世界畫質事件接收
 
-  /** 畫質代碼對應的原生寬度，用來比較「哪個比較大」 */
-  function qualityWidth(quality) {
-    return YAR_QUALITY_WIDTH[quality] || 0;
-  }
-
   /**
-   * 決定版面要採用的畫質。
-   * 升畫質立即跟進（使用者期待的就是變大）；降畫質先等 QUALITY_SHRINK_SETTLE_MS，
-   * 期間又升回去就不縮，藉此濾掉 ABR 抖動。
+   * 決定版面要採用的畫質。升降畫質的判準見 src/quality-policy.js 的 yarShouldAdoptImmediately；
+   * 這裡只負責 settle 計時器與狀態更新。
    * @returns {boolean} 是否需要立即重新套用版面
    */
   function adoptQuality(quality) {
@@ -492,14 +411,14 @@
       clearTimeout(shrinkTimer);
       shrinkTimer = null;
     }
-    if (!lastQuality || qualityWidth(quality) >= qualityWidth(lastQuality)) {
+    if (yarShouldAdoptImmediately(quality, lastQuality)) {
       lastQuality = quality;
       return true;
     }
     shrinkTimer = setTimeout(() => {
       shrinkTimer = null;
       // 這段期間畫質又變了就不算數，交給後來那次事件處理
-      if (reportedQuality !== quality || qualityWidth(quality) >= qualityWidth(lastQuality)) return;
+      if (reportedQuality !== quality || yarShouldAdoptImmediately(quality, lastQuality)) return;
       lastQuality = quality;
       applyPlayerLayout();
       syncBrowserWindow();

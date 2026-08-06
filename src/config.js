@@ -78,6 +78,24 @@ const YAR_QUALITY_WIDTH = {
   tiny: 256
 };
 
+/**
+ * 畫質代碼 → 原生寬度；無法辨識的代碼一律 0。
+ *
+ * 一定要走 hasOwnProperty，不能寫成 `YAR_QUALITY_WIDTH[code] || 0`：畫質代碼有一條來自
+ * 主世界 YouTube player 物件的路徑（頁面可控），`__proto__` / `constructor` / `toString`
+ * 這類鍵會沿原型鏈取到物件或函式，`||` 判定為 truthy 因而不會退回 0，
+ * 之後所有數值比較都靜默失真（`obj >= 1920` 恆為 false，`Math.max` 得到 NaN）。
+ * v2.3.0 曾在 yarShouldUpscale 修過同一類缺陷，此處集中成單一入口避免再犯。
+ *
+ * @param {string} quality YouTube 內部畫質代碼
+ * @returns {number} 原生像素寬度；未知代碼回 0
+ */
+function yarQualityWidthOf(quality) {
+  return Object.prototype.hasOwnProperty.call(YAR_QUALITY_WIDTH, quality)
+    ? YAR_QUALITY_WIDTH[quality]
+    : 0;
+}
+
 /** popup 下拉選單值 → YouTube 內部畫質代碼 */
 const YAR_QUALITY_ALIAS = {
   '2160p': 'hd2160',

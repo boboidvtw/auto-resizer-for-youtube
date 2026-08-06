@@ -3,7 +3,7 @@
  * Pure CSS builder for the watch-page player layout.
  *
  * Created: 2026-08-02
- * 依賴 (depends on): src/config.js 的 YAR_LAYOUT / YAR_QUALITY_WIDTH
+ * 依賴 (depends on): src/config.js 的 YAR_LAYOUT / YAR_QUALITY_WIDTH / yarQualityWidthOf
  *
  * 設計要點：寬度以 CSS min() 表示，因此視窗縮放時瀏覽器會自行重算，
  * 不需要 JS 監聽 resize，也不會像 screen.availWidth 那樣誤判成實體螢幕尺寸。
@@ -17,6 +17,63 @@
  */
 const YAR_SCOPE_PLAYER = 'ytd-watch-flexy:not([full-bleed-player])';
 const YAR_SCOPE_COLUMNS = 'ytd-watch-flexy:not([theater]):not([full-bleed-player])';
+
+/** 絕大多數影片的長寬比；長寬比未知時的退路 */
+const YAR_DEFAULT_ASPECT = 16 / 9;
+
+/**
+ * 與 16:9 的差距在此之內就當作 16:9。
+ * 不設這個容差的話，量到 1.7778 這種浮點值會讓每次產生的 CSS 字串都略有不同，
+ * 而絕大多數影片本來就是 16:9 —— 那等於把所有既有情境都推進「非預設」的路徑裡。
+ */
+const YAR_ASPECT_EPSILON = 0.01;
+
+/**
+ * 版面要採用的長寬比。
+ *
+ * 回傳 null 代表「就用 16:9 的字面寫法」——這是刻意的：16:9 的輸出必須與加入本功能之前
+ * **逐字相同**，否則一個為了直式影片做的修補會讓所有既有影片的版面跟著改變
+ * （同類教訓：窄修補套用到全套反而倒賠）。
+ *
+ * @param {{aspectRatio?: number}} [context]
+ * @returns {number|null} 非 16:9 時回傳實際比例，否則 null
+ */
+function yarLayoutAspectRatio(context) {
+  const ratio = context && context.aspectRatio;
+  if (!Number.isFinite(ratio) || ratio <= 0) return null;
+  if (Math.abs(ratio - YAR_DEFAULT_ASPECT) < YAR_ASPECT_EPSILON) return null;
+  // 四捨五入到固定位數：CSS 字串與 yarPlayerWidthFor 的數值孿生必須用同一個值，
+  // 否則防漂移測試會在小數尾巴上失敗
+  return Number(ratio.toFixed(4));
+}
+
+/**
+ * 這個畫質在這個長寬比之下的原生寬度。
+ *
+ * 關鍵事實：**YouTube 的畫質標籤指的一律是短邊**，不是寬也不是高。
+ *   16:9 的 1080p -> 1920x1080（短邊 1080）
+ *   9:16 的 1080p -> 1080x1920（短邊 1080，實測 OtV7PAtZAyA）
+ *   21:9 的 1080p -> 2520x1080（短邊 1080）
+ * 而 `YAR_QUALITY_WIDTH` 記的是 **16:9 之下的寬**（1080p -> 1920），
+ * 所以短邊要先還原：`寬 × 9/16`。
+ *
+ * 兩個方向都會出錯，而且錯的方向相反：
+ * - 直式：拿 1280 當 720p 的原生寬，等於允許一支 720x1280 的影片放大到 1280 寬（2 倍上採樣）
+ * - 超寬（21:9）：拿 1920 當 1080p 的原生寬，一支 2520x1080 的影片會被鎖在 1920，白白縮小
+ *
+ * @param {string} quality YouTube 內部畫質代碼
+ * @param {number|null} ratio yarLayoutAspectRatio 的輸出；null 代表 16:9
+ * @returns {number} 原生寬度；未知畫質回 0
+ */
+function yarNativeWidthFor(quality, ratio) {
+  const referenceWidth = yarQualityWidthOf(quality);
+  if (!referenceWidth) return 0;
+  // 16:9 直接回表上的值，一個位元都不動（既有情境必須完全不受影響）
+  if (ratio === null) return referenceWidth;
+
+  const shortSide = (referenceWidth * 9) / 16;
+  return Math.round(ratio >= 1 ? shortSide * ratio : shortSide);
+}
 
 /** 頁面左右內距（零留白模式下歸零）＋ 捲軸保留 */
 function yarReservePageWidth(removeSideGaps) {
@@ -56,14 +113,18 @@ function yarColumnGap(removeSideGaps) {
 function yarBuildWidthExpression(settings, quality, context) {
   const reserveW = yarReservePageWidth(settings.removeSideGaps);
   const reserveH = YAR_LAYOUT.MASTHEAD_HEIGHT + YAR_LAYOUT.VERTICAL_MARGIN;
+  const ratio = yarLayoutAspectRatio(context);
 
   const byViewportWidth = `calc(100vw - ${reserveW}px)`;
-  const byViewportHeight = `calc((100vh - ${reserveH}px) * 16 / 9)`;
+  // 16:9 保留 `* 16 / 9` 的字面寫法，讓既有情境的輸出一個字都不變
+  const byViewportHeight = ratio === null
+    ? `calc((100vh - ${reserveH}px) * 16 / 9)`
+    : `calc((100vh - ${reserveH}px) * ${ratio})`;
 
   const caps = [byViewportWidth, byViewportHeight];
   const allowUpscale = !!(context && context.allowUpscale);
   if (settings.resizeMode === 'autoByQuality' && !allowUpscale) {
-    const nativeWidth = YAR_QUALITY_WIDTH[quality];
+    const nativeWidth = yarNativeWidthFor(quality, ratio);
     if (nativeWidth) caps.unshift(`${nativeWidth}px`);
   }
 
@@ -92,11 +153,15 @@ function yarPlayerWidthFor(settings, quality, viewportWidth, viewportHeight, con
 
   const reserveW = yarReservePageWidth(settings.removeSideGaps);
   const reserveH = YAR_LAYOUT.MASTHEAD_HEIGHT + YAR_LAYOUT.VERTICAL_MARGIN;
+  const ratio = yarLayoutAspectRatio(context);
 
-  const caps = [vw - reserveW, ((vh - reserveH) * 16) / 9];
+  const caps = [
+    vw - reserveW,
+    ratio === null ? ((vh - reserveH) * 16) / 9 : (vh - reserveH) * ratio
+  ];
   const allowUpscale = !!(context && context.allowUpscale);
   if (settings.resizeMode === 'autoByQuality' && !allowUpscale) {
-    const nativeWidth = YAR_QUALITY_WIDTH[quality];
+    const nativeWidth = yarNativeWidthFor(quality, ratio);
     if (nativeWidth) caps.push(nativeWidth);
   }
 
@@ -318,6 +383,20 @@ function yarBuildPlayerCss(settings, quality, context) {
   const playerWidth = yarBuildWidthExpression(settings, quality, context);
 
   /*
+   * 播放器高度必須跟著影片的長寬比走，不能寫死 9/16。
+   *
+   * 實測（2026-08-06，Brave，內建螢幕 1670x896，一支 720x1280 的直式影片）：
+   *   default（不介入）      容器 1038x780、可見影像 439x780  ← YouTube 自己會給高的容器
+   *   autoByQuality（寫死 9/16）容器 1280x720、可見影像 405x720  ← 反而比不裝擴充功能還小
+   * 也就是說「直式影片有黑邊是同 YouTube 原生行為」這個說法是錯的：原生沒有這回事，
+   * 是我們把容器壓成 16:9 才逼出左右黑邊，而且影像面積少了 14.8%。
+   */
+  const ratio = yarLayoutAspectRatio(context);
+  const playerHeight = ratio === null
+    ? 'calc(var(--yar-player-w) * 9 / 16)'
+    : `calc(var(--yar-player-w) / ${ratio})`;
+
+  /*
    * 欄位版面一律接管。曾經只在 removeSideGaps 開啟時才套，但播放器寬度變數
    * （--ytd-watch-flexy-player-width）是 YouTube 用來算 #primary 寬度的同一個變數，
    * 放大播放器卻不接管欄位，#primary + 側欄就會直接溢出視窗。
@@ -334,11 +413,11 @@ function yarBuildPlayerCss(settings, quality, context) {
    * 曾經只排除播放器尺寸而沒排除變數，結果是播放器縮成兩欄寬靠左、右側一大片黑邊。
    */
   return `
-      /* 播放器尺寸來源：單一 custom property，高度一律 16:9 推導 */
+      /* 播放器尺寸來源：單一 custom property，高度由影片長寬比推導（未知時為 16:9） */
       ytd-watch-flexy:not([full-bleed-player]),
       ytd-watch-flexy[flexy]:not([full-bleed-player]) {
         --yar-player-w: ${playerWidth};
-        --yar-player-h: calc(var(--yar-player-w) * 9 / 16);
+        --yar-player-h: ${playerHeight};
         --ytd-watch-flexy-player-width: var(--yar-player-w) !important;
         --ytd-watch-flexy-player-height: var(--yar-player-h) !important;
         --ytd-watch-flexy-min-player-height: var(--yar-player-h) !important;

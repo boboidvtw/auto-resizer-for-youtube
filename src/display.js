@@ -281,14 +281,12 @@ function yarShouldUpscale(desiredQuality, availableQualities) {
   if (!Array.isArray(availableQualities) || availableQualities.length === 0) return false;
 
   /*
-   * 一律走 hasOwnProperty，不能用 `YAR_QUALITY_WIDTH[code] || 0`：
+   * 一律走 yarQualityWidthOf（內部是 hasOwnProperty），不能用 `YAR_QUALITY_WIDTH[code] || 0`：
    * 這個陣列來自主世界的 YouTube player 物件（頁面可控），`__proto__` 或 `constructor`
    * 會沿著原型鏈取到函式，`||` 判定為 truthy，Math.max 就得到 NaN，之後所有比較都靜默失真。
    */
   const bestAvailable = availableQualities.reduce((max, code) => {
-    const width = Object.prototype.hasOwnProperty.call(YAR_QUALITY_WIDTH, code)
-      ? YAR_QUALITY_WIDTH[code]
-      : 0;
+    const width = yarQualityWidthOf(code);
     return width > max ? width : max;
   }, 0);
   if (bestAvailable <= 0) return false;

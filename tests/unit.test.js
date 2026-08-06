@@ -32,7 +32,7 @@ const EXPORTED = [
 
 function loadSandbox() {
   const context = vm.createContext({ console });
-  ['src/config.js', 'src/display.js', 'src/layout.js'].forEach((file) => {
+  ['src/config.js', 'src/display.js', 'src/layout.js', 'src/quality-policy.js', 'src/window-fit.js'].forEach((file) => {
     vm.runInContext(fs.readFileSync(path.join(ROOT, file), 'utf8'), context, { filename: file });
   });
   vm.runInContext(EXPORTED.map((name) => `globalThis.${name} = ${name};`).join('\n'), context);
@@ -883,4 +883,427 @@ test('yarNormalizeSettings: 新增的多螢幕欄位有預設值且會擋非法�
   assert.strictEqual(good.displayAwareQuality, false);
   assert.strictEqual(good.autoQualityCeiling, 'hd1440');
   assert.strictEqual(good.popupTargetDisplay, 'largest');
+});
+
+// ================================================ 畫質決策（src/quality-policy.js）
+//
+// 這一區的函式是從 content.js 抽出來的，抽出的目的就是讓它們可測：
+// 原本埋在 IIFE 裡讀模組層級變數，除了開瀏覽器沒有別的辦法驗。
+
+test('yarQualityWidthOf: 原型鏈上的鍵一律回 0（畫質代碼來自頁面可控的主世界）', () => {
+  assert.strictEqual(sandbox.yarQualityWidthOf('hd1080'), 1920);
+  assert.strictEqual(sandbox.yarQualityWidthOf('tiny'), 256);
+
+  // `YAR_QUALITY_WIDTH[code] || 0` 會沿原型鏈取到函式／物件而不是 undefined，
+  // `||` 判定為 truthy 於是不會退回 0，之後所有數值比較全部靜默失真。
+  // 同一類缺陷 v2.3.0 已在 yarShouldUpscale 修過一次。
+  ['__proto__', 'constructor', 'toString', 'hasOwnProperty', 'valueOf'].forEach((key) => {
+    const width = sandbox.yarQualityWidthOf(key);
+    assert.strictEqual(typeof width, 'number', `${key} 必須回數字`);
+    assert.strictEqual(width, 0, `${key} 必須回 0`);
+  });
+
+  assert.strictEqual(sandbox.yarQualityWidthOf(undefined), 0);
+  assert.strictEqual(sandbox.yarQualityWidthOf(null), 0);
+  assert.strictEqual(sandbox.yarQualityWidthOf(''), 0);
+});
+
+test('yarShouldAdoptImmediately: 升畫質立即套用，降畫質必須等穩定', () => {
+  // 還沒有基準時一律立即採用
+  assert.strictEqual(sandbox.yarShouldAdoptImmediately('medium', null), true);
+
+  assert.strictEqual(sandbox.yarShouldAdoptImmediately('hd1080', 'hd720'), true, '升畫質');
+  assert.strictEqual(sandbox.yarShouldAdoptImmediately('hd1080', 'hd1080'), true, '同畫質視同不需等待');
+  assert.strictEqual(sandbox.yarShouldAdoptImmediately('hd720', 'hd1080'), false, '降畫質要等 settle');
+
+  // 主世界送來無法辨識的代碼時，不得被當成「比目前高」而立刻放大版面
+  assert.strictEqual(sandbox.yarShouldAdoptImmediately('__proto__', 'hd1080'), false);
+});
+
+test('yarDisplayCeilingWidth: 問的是螢幕容量，不受目前畫質的原生寬反過來限制', () => {
+  const settings = sandbox.yarNormalizeSettings({ resizeMode: 'autoByQuality' });
+  // 目前在播 240p（原生 426px）。若把它當上限就會得到「因為現在是 240p，所以只需要 240p」
+  // 的自我實現迴圈，螢幕感知永遠拉不高畫質。
+  const ceiling = sandbox.yarDisplayCeilingWidth(settings, 'small', { width: 1600, height: 863 });
+  assert.ok(ceiling > 1300, `螢幕容量應遠大於 426，實得 ${ceiling}`);
+
+  // quality 未知時要有可用的預設探測值，不能回 null
+  assert.ok(sandbox.yarDisplayCeilingWidth(settings, null, { width: 1600, height: 863 }) === ceiling);
+
+  assert.strictEqual(sandbox.yarDisplayCeilingWidth(settings, 'hd1080', {}), null, 'viewport 無效回 null');
+});
+
+test('yarDesiredQualityForDisplay: 停用 / default 模式 / 彈出視窗一律不干預', () => {
+  const viewport = { width: 1600, height: 863 };
+  const base = { quality: 'hd720', viewport, dpr: 2, isPopupPlayer: false };
+
+  const off = sandbox.yarNormalizeSettings({ enabled: false });
+  assert.strictEqual(sandbox.yarDesiredQualityForDisplay(off, base), null);
+
+  const noDisplayAware = sandbox.yarNormalizeSettings({ displayAwareQuality: false });
+  assert.strictEqual(sandbox.yarDesiredQualityForDisplay(noDisplayAware, base), null);
+
+  const defaultMode = sandbox.yarNormalizeSettings({ resizeMode: 'default' });
+  assert.strictEqual(sandbox.yarDesiredQualityForDisplay(defaultMode, base), null);
+
+  const on = sandbox.yarNormalizeSettings({ resizeMode: 'autoByQuality' });
+  assert.strictEqual(
+    sandbox.yarDesiredQualityForDisplay(on, Object.assign({}, base, { isPopupPlayer: true })),
+    null,
+    '彈出視窗的尺寸由閉環校正負責，不走螢幕感知'
+  );
+  assert.ok(sandbox.yarDesiredQualityForDisplay(on, base), '一般情況必須給出畫質');
+});
+
+test('yarDesiredQualityForDisplay: 依實體像素而非 CSS 寬選畫質（Retina 不得長期要低）', () => {
+  const settings = sandbox.yarNormalizeSettings({ resizeMode: 'autoByQuality' });
+
+  // 內建 Retina：CSS 寬 1600、DPR 2 → 實體需求約 2784px
+  const builtin = sandbox.yarDesiredQualityForDisplay(settings, {
+    quality: 'hd1080', viewport: { width: 1600, height: 863 }, dpr: 2, isPopupPlayer: false
+  });
+  // 4K TV：CSS 寬 3840、DPR 1 → 實體需求約 3312px
+  const uhd = sandbox.yarDesiredQualityForDisplay(settings, {
+    quality: 'hd1080', viewport: { width: 3840, height: 1943 }, dpr: 1, isPopupPlayer: false
+  });
+
+  assert.strictEqual(builtin, 'hd2160', `內建 @2x 應要到 2160p，實得 ${builtin}`);
+  assert.strictEqual(uhd, 'hd2160', `4K @1x 應要到 2160p，實得 ${uhd}`);
+
+  // 只看 CSS 寬的話這兩台會被判成差一倍的需求——這正是 v2.3.0 要修掉的錯誤
+  const cssOnly = sandbox.yarDesiredQualityForDisplay(settings, {
+    quality: 'hd1080', viewport: { width: 1600, height: 863 }, dpr: 1, isPopupPlayer: false
+  });
+  assert.notStrictEqual(cssOnly, builtin, 'DPR 必須真的參與計算');
+});
+
+test('yarEffectiveAvailableQualities: 使用者釘死畫質時，那個畫質就是實質上限', () => {
+  const available = ['hd2160', 'hd1080', 'hd720'];
+
+  const auto = sandbox.yarNormalizeSettings({ preferredQuality: 'auto' });
+  assert.deepStrictEqual(plain(sandbox.yarEffectiveAvailableQualities(auto, available)), available);
+
+  const pinned = sandbox.yarNormalizeSettings({ preferredQuality: '1080p' });
+  assert.deepStrictEqual(plain(sandbox.yarEffectiveAvailableQualities(pinned, available)), ['hd1080']);
+
+  // 清單未就緒時不得憑空生出東西
+  assert.deepStrictEqual(plain(sandbox.yarEffectiveAvailableQualities(auto, [])), []);
+});
+
+test('yarLayoutContextFor: 只有「已是影片最高畫質仍填不滿螢幕」才允許放大', () => {
+  const settings = sandbox.yarNormalizeSettings({ resizeMode: 'autoByQuality' });
+  const viewport = { width: 3840, height: 1943 };
+
+  // 影片本身有 4K → 不放大，去要更高畫質才是對的
+  const has4k = sandbox.yarLayoutContextFor(settings, {
+    quality: 'hd1080', viewport, dpr: 1, isPopupPlayer: false, availableQualities: ['hd2160', 'hd1080']
+  });
+  assert.strictEqual(has4k.allowUpscale, false);
+
+  // 影片最高只有 1080p → 放大是唯一能填滿螢幕的辦法
+  const only1080 = sandbox.yarLayoutContextFor(settings, {
+    quality: 'hd1080', viewport, dpr: 1, isPopupPlayer: false, availableQualities: ['hd1080', 'hd720']
+  });
+  assert.strictEqual(only1080.allowUpscale, true);
+
+  // 清單還沒到手時寧可晚一步放大，也不要在載入初期亂跳尺寸
+  const notReady = sandbox.yarLayoutContextFor(settings, {
+    quality: 'hd1080', viewport, dpr: 1, isPopupPlayer: false, availableQualities: []
+  });
+  assert.strictEqual(notReady.allowUpscale, false);
+});
+
+// ============================================== 視窗尺寸計算（src/window-fit.js）
+
+test('yarWindowChromeFrom: 量不到可信值時回 null（絕不拿 0 或負數去算）', () => {
+  assert.deepStrictEqual(
+    plain(sandbox.yarWindowChromeFrom(1600, 1584, 1000, 829)),
+    { width: 16, height: 171 }
+  );
+  // 寬度沒有外框是合法的（全螢幕）；高度必為正，否則就是還沒量到
+  assert.deepStrictEqual(plain(sandbox.yarWindowChromeFrom(1600, 1600, 1000, 829)).width, 0);
+  assert.strictEqual(sandbox.yarWindowChromeFrom(1600, 1584, 1000, 1000), null, '高度差為 0 = 尚未量到');
+  assert.strictEqual(sandbox.yarWindowChromeFrom(1500, 1584, 1000, 829), null, '負的寬度差不可信');
+  assert.strictEqual(sandbox.yarWindowChromeFrom(NaN, 1584, 1000, 829), null);
+});
+
+test('yarAspectRatioOf: 支援非 16:9，取不到時退回 16:9', () => {
+  assert.strictEqual(sandbox.yarAspectRatioOf(1920, 1080), 16 / 9);
+  assert.strictEqual(sandbox.yarAspectRatioOf(1440, 1080), 4 / 3);
+  // 直式影片 / Shorts：9:16
+  assert.ok(Math.abs(sandbox.yarAspectRatioOf(1080, 1920) - 9 / 16) < 1e-9);
+
+  // 影片中繼資料未載入時 videoWidth/Height 是 0，不能算出 0 或 NaN
+  assert.strictEqual(sandbox.yarAspectRatioOf(0, 0), 16 / 9);
+  assert.strictEqual(sandbox.yarAspectRatioOf(1920, 0), 16 / 9);
+  assert.strictEqual(sandbox.yarAspectRatioOf(undefined, undefined), 16 / 9);
+});
+
+test('yarBuildFitRequest: 一般視窗要扣頁面內距，彈出視窗不扣', () => {
+  const settings = sandbox.yarNormalizeSettings({ removeSideGaps: false });
+  const measured = { width: 16, height: 171 };
+
+  const normal = plain(sandbox.yarBuildFitRequest(settings, {
+    quality: 'hd1080', isPopup: false, measuredChrome: measured, videoWidth: 1920, videoHeight: 1080
+  }));
+  assert.strictEqual(normal.playerWidth, 1920);
+  assert.strictEqual(normal.extraWidth, sandbox.yarReservePageWidth(false) + 16);
+  assert.strictEqual(normal.extraHeight, 171);
+
+  const popup = plain(sandbox.yarBuildFitRequest(settings, {
+    quality: 'hd1080', isPopup: true, measuredChrome: { width: 0, height: 28 }, videoWidth: 1920, videoHeight: 1080
+  }));
+  assert.strictEqual(popup.extraWidth, 0, '彈出視窗沒有頁面內距可扣');
+  assert.strictEqual(popup.extraHeight, 28);
+
+  // 量不到外框時各自退回估計值
+  const est = plain(sandbox.yarBuildFitRequest(settings, {
+    quality: 'hd1080', isPopup: true, measuredChrome: null, videoWidth: 1920, videoHeight: 1080
+  }));
+  assert.strictEqual(est.extraHeight, sandbox.YAR_LAYOUT.POPUP_CHROME_HEIGHT);
+});
+
+test('yarBuildFitRequest: 畫質代碼來自主世界，原型鏈鍵不得變成 playerWidth', () => {
+  const settings = sandbox.yarNormalizeSettings(null);
+  const req = plain(sandbox.yarBuildFitRequest(settings, {
+    quality: '__proto__', isPopup: false, measuredChrome: null, videoWidth: 1920, videoHeight: 1080
+  }));
+  assert.strictEqual(req.playerWidth, sandbox.YAR_QUALITY_WIDTH.hd1080, '無法辨識就退回 1080p');
+});
+
+test('yarBuildFitRequest: 直式影片的長寬比要原樣帶進請求', () => {
+  const settings = sandbox.yarNormalizeSettings(null);
+  const req = plain(sandbox.yarBuildFitRequest(settings, {
+    quality: 'hd1080', isPopup: true, measuredChrome: { width: 0, height: 28 },
+    videoWidth: 1080, videoHeight: 1920
+  }));
+  assert.ok(Math.abs(req.aspectRatio - 9 / 16) < 1e-9, `實得 ${req.aspectRatio}`);
+});
+
+test('yarWindowHeightWasCapped: 系統截短視窗高度是單向判斷', () => {
+  // 要求 900 只拿到 875（macOS 選單列）→ 受限
+  assert.strictEqual(sandbox.yarWindowHeightWasCapped(900, 875), true);
+  // 完全達成 → 未受限
+  assert.strictEqual(sandbox.yarWindowHeightWasCapped(900, 900), false);
+  // 容差內的差異不算（視窗尺寸有系統粒度）
+  assert.strictEqual(sandbox.yarWindowHeightWasCapped(900, 899), false);
+  // 還沒送出過請求時無從判斷
+  assert.strictEqual(sandbox.yarWindowHeightWasCapped(null, 875), false);
+});
+
+test('yarPopupCalibrationTarget: 未受限時調高度，受限後只調寬度', () => {
+  // 內容區 1280x800，影片 16:9 → 高度應該是 720
+  const free = plain(sandbox.yarPopupCalibrationTarget({
+    innerWidth: 1280, innerHeight: 800, chromeWidth: 0, chromeHeight: 28,
+    aspectRatio: 16 / 9, heightCapped: false
+  }));
+  assert.strictEqual(free.innerWidth, 1280, '未受限時寬度不動');
+  assert.strictEqual(free.innerHeight, 720);
+  assert.strictEqual(free.height, 748, '外框高度要加回去');
+  assert.strictEqual(free.heightCapped, false);
+
+  /*
+   * 高度受限後絕對不能再送 height：系統每次都會再截掉一個選單列的高度
+   * （實測 1600 -> 1557 -> 1512 -> 1468 -> 1423 一路縮小）。改為只縮寬度來符合比例。
+   */
+  const capped = plain(sandbox.yarPopupCalibrationTarget({
+    innerWidth: 1280, innerHeight: 700, chromeWidth: 0, chromeHeight: 28,
+    aspectRatio: 16 / 9, heightCapped: true
+  }));
+  assert.strictEqual(capped.innerHeight, 700, '受限時高度不動');
+  assert.strictEqual(capped.innerWidth, Math.round(700 * (16 / 9)));
+  assert.strictEqual(capped.heightCapped, true, '呼叫端據此決定不送 height');
+  // height 仍要回傳：下一輪的受限判斷需要「上一輪要求了什麼」
+  assert.strictEqual(capped.height, 700 + 28);
+});
+
+test('yarPopupCalibrationTarget: 已在容差內就回 null（避免無效重試）', () => {
+  // 1280x720 已經精準是 16:9
+  assert.strictEqual(sandbox.yarPopupCalibrationTarget({
+    innerWidth: 1280, innerHeight: 720, chromeWidth: 0, chromeHeight: 28,
+    aspectRatio: 16 / 9, heightCapped: false
+  }), null);
+
+  // 差 4px，在 8px 容差內
+  assert.strictEqual(sandbox.yarPopupCalibrationTarget({
+    innerWidth: 1280, innerHeight: 724, chromeWidth: 0, chromeHeight: 28,
+    aspectRatio: 16 / 9, heightCapped: false
+  }), null);
+
+  // 內容區尚未成形
+  assert.strictEqual(sandbox.yarPopupCalibrationTarget({
+    innerWidth: 0, innerHeight: 0, chromeWidth: 0, chromeHeight: 28,
+    aspectRatio: 16 / 9, heightCapped: false
+  }), null);
+});
+
+test('yarPopupCalibrationTarget: 直式影片（9:16）也要算對，不能寫死 16:9', () => {
+  const portrait = plain(sandbox.yarPopupCalibrationTarget({
+    innerWidth: 600, innerHeight: 800, chromeWidth: 0, chromeHeight: 28,
+    aspectRatio: 9 / 16, heightCapped: false
+  }));
+  assert.strictEqual(portrait.innerWidth, 600);
+  assert.strictEqual(portrait.innerHeight, Math.round(600 / (9 / 16)), '直式影片高度應大於寬度');
+  assert.ok(portrait.innerHeight > portrait.innerWidth);
+});
+
+// ==================================================== 非 16:9 影片的版面長寬比
+//
+// 背景（2026-08-06 真機實測，Brave，內建螢幕 1670x896，一支 720x1280 的直式影片）：
+//   default（不介入）        容器 1038x780、可見影像 439x780  ← YouTube 自己會給高的容器
+//   autoByQuality（寫死 9/16）容器 1280x720、可見影像 405x720  ← 比不裝擴充功能還小 14.8%
+// 也就是說「直式影片有黑邊是同 YouTube 原生行為」是錯的，那是我們自己造成的。
+
+test('16:9 影片的 CSS 必須與加入長寬比支援之前逐字相同（防窄修補讓全套退步）', () => {
+  /*
+   * 這條是整個改動的守門。絕大多數影片是 16:9，若為了直式影片而讓 16:9 的輸出也跟著變
+   * （例如把 `* 16 / 9` 改寫成 `* 1.7778`），受影響的就不是少數 Shorts 而是全部影片。
+   */
+  const settings = sandbox.yarNormalizeSettings({ resizeMode: 'autoByQuality' });
+  const baseline = sandbox.yarBuildPlayerCss(settings, 'hd1080', {});
+
+  [16 / 9, 1.7778, 1920 / 1080, undefined, null, 0, NaN, -1, 'garbage'].forEach((aspectRatio) => {
+    assert.strictEqual(
+      sandbox.yarBuildPlayerCss(settings, 'hd1080', { aspectRatio }),
+      baseline,
+      `aspectRatio=${String(aspectRatio)} 不該改變 16:9 的輸出`
+    );
+  });
+
+  assert.ok(baseline.includes('--yar-player-h: calc(var(--yar-player-w) * 9 / 16)'));
+  assert.ok(baseline.includes('* 16 / 9)'));
+});
+
+test('直式影片：播放器高度改由長寬比推導，不再壓成 16:9', () => {
+  const settings = sandbox.yarNormalizeSettings({ resizeMode: 'autoByQuality' });
+  const css = sandbox.yarBuildPlayerCss(settings, 'hd720', { aspectRatio: 720 / 1280 });
+
+  assert.ok(css.includes('--yar-player-h: calc(var(--yar-player-w) / 0.5625)'),
+    `高度應由 0.5625 推導，實得：${(css.match(/--yar-player-h: [^;]+/) || [])[0]}`);
+  assert.ok(!css.includes('* 9 / 16'), '不得再出現寫死的 9/16');
+});
+
+test('直式影片：可見影像不得比 YouTube 原生小', () => {
+  /*
+   * 真機實測的數字直接寫成門檻。原生在同一個 viewport 下給的是 439x780；
+   * 修正前我們給 405x720（更小），修正後應該至少不輸原生。
+   */
+  const settings = sandbox.yarNormalizeSettings({ resizeMode: 'autoByQuality' });
+  const ratio = 720 / 1280;
+  const vw = 1670;
+  const vh = 896;
+
+  const width = sandbox.yarPlayerWidthFor(settings, 'hd720', vw, vh, { aspectRatio: ratio });
+  const height = width / ratio;
+
+  const NATIVE = { w: 439, h: 780 };
+  assert.ok(width >= NATIVE.w, `寬 ${Math.round(width)} 應 >= 原生 ${NATIVE.w}`);
+  assert.ok(height >= NATIVE.h, `高 ${Math.round(height)} 應 >= 原生 ${NATIVE.h}`);
+
+  // 也不能撐破視窗：高度必須留得下 masthead 與上下呼吸空間
+  const reserveH = sandbox.YAR_LAYOUT.MASTHEAD_HEIGHT + 24;
+  assert.ok(height <= vh - reserveH + 1, `高 ${Math.round(height)} 不得超過可用高度 ${vh - reserveH}`);
+
+  // 修正前的行為（寫死 16:9）會得到 405x720 —— 確認我們真的離開了那個結果
+  const before = sandbox.yarPlayerWidthFor(settings, 'hd720', vw, vh, {});
+  assert.ok(before / (16 / 9) < NATIVE.h, '對照組：寫死 16:9 時高度確實不如原生');
+});
+
+test('yarNativeWidthFor: 畫質標籤指的一律是短邊（兩個方向都要對）', () => {
+  /*
+   * YAR_QUALITY_WIDTH 記的是 16:9 之下的寬（1080p -> 1920），而 YouTube 的畫質標籤
+   * 指的是**短邊**。兩個方向都會出錯，而且錯的方向相反：
+   *   直式 720x1280 -> 拿 1280 當原生寬 = 允許 2 倍上採樣
+   *   超寬 2520x1080 -> 拿 1920 當原生寬 = 白白把播放器鎖小
+   */
+  assert.strictEqual(sandbox.yarNativeWidthFor('hd720', null), 1280, '16:9 沿用表上的值');
+  assert.strictEqual(sandbox.yarNativeWidthFor('hd720', 16 / 9), 1280, '顯式 16:9 也要得到同一個值');
+
+  // 直式：短邊就是寬
+  assert.strictEqual(sandbox.yarNativeWidthFor('hd720', 9 / 16), 720, '9:16 的 720p 是 720 寬');
+  assert.strictEqual(sandbox.yarNativeWidthFor('hd1080', 9 / 16), 1080, '實測 OtV7PAtZAyA = 1080x1920');
+  assert.strictEqual(sandbox.yarNativeWidthFor('large', 3 / 4), 480,
+    '3:4 直式的 480p 是 480 寬（不是 641——短邊與長邊搞混就會得到那個數字）');
+
+  // 超寬：短邊是高，寬要乘回去
+  assert.strictEqual(sandbox.yarNativeWidthFor('hd1080', 21 / 9), 2520, '21:9 的 1080p 是 2520 寬');
+  assert.strictEqual(sandbox.yarNativeWidthFor('hd720', 2), 1440, '2:1 的 720p 是 1440 寬');
+
+  // 正方形：長短邊相同
+  assert.strictEqual(sandbox.yarNativeWidthFor('hd1080', 1), 1080);
+
+  assert.strictEqual(sandbox.yarNativeWidthFor('__proto__', null), 0, '未知畫質不得沿原型鏈取值');
+  assert.strictEqual(sandbox.yarNativeWidthFor('__proto__', 9 / 16), 0);
+});
+
+test('超寬影片：不得被 16:9 的原生寬度鎖小', () => {
+  /*
+   * 一支 2520x1080 的 21:9 影片在寬螢幕上，舊寫法會把播放器鎖在 1920px
+   * （YAR_QUALITY_WIDTH.hd1080），實際上它本來就有 2520px 可用。
+   */
+  const settings = sandbox.yarNormalizeSettings({ resizeMode: 'autoByQuality' });
+  const context = { aspectRatio: 21 / 9 };
+  const width = sandbox.yarPlayerWidthFor(settings, 'hd1080', 3800, 1953, context);
+
+  assert.ok(width > 1920, `21:9 的 1080p 應可長到 2520，實得 ${Math.round(width)}`);
+  assert.ok(width <= 2520 + 1, `不得超過真正的原生寬 2520，實得 ${Math.round(width)}`);
+});
+
+test('防漂移：非 16:9 之下 yarPlayerWidthFor 仍須與 CSS 運算式算出同一個數字', () => {
+  const ratios = [720 / 1280, 1440 / 1080, 1 / 1, 21 / 9];
+  const viewports = [[1670, 896], [3800, 1953], [900, 800], [1280, 720]];
+  const modes = ['autoByQuality', 'fitWindow'];
+
+  modes.forEach((resizeMode) => {
+    ratios.forEach((aspectRatio) => {
+      viewports.forEach(([vw, vh]) => {
+        const settings = sandbox.yarNormalizeSettings({ resizeMode, removeSideGaps: true });
+        const css = sandbox.yarBuildPlayerCss(settings, 'hd720', { aspectRatio });
+        const fromCss = playerWidthAt(css, vw, vh);
+        const fromJs = sandbox.yarPlayerWidthFor(settings, 'hd720', vw, vh, { aspectRatio });
+        assert.ok(Math.abs(fromCss - fromJs) < 0.01,
+          `${resizeMode} ratio=${aspectRatio.toFixed(4)} ${vw}x${vh}: CSS=${fromCss} JS=${fromJs}`);
+      });
+    });
+  });
+});
+
+test('src/ 底下每一支檔案都必須有載入端（manifest 或 importScripts）', () => {
+  /*
+   * 這條守的是「新增純函式模組卻忘了註冊」這一類錯誤。tools/package.sh 打包的是整個 src/
+   * 目錄，所以漏註冊的檔案照樣會進 zip、CI 照樣全綠、擴充功能照樣載得起來 ——
+   * 只有在真的呼叫到那個函式的那一刻才會炸 ReferenceError，而那通常是使用者先遇到。
+   */
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
+  const injected = manifest.content_scripts.reduce((all, entry) => all.concat(entry.js), []);
+  const imported = fs.readFileSync(path.join(ROOT, 'background.js'), 'utf8');
+
+  fs.readdirSync(path.join(ROOT, 'src'))
+    .filter((name) => name.endsWith('.js'))
+    .forEach((name) => {
+      const rel = `src/${name}`;
+      assert.ok(
+        injected.includes(rel) || imported.includes(`'${rel}'`),
+        `${rel} 沒有被 manifest 的 content_scripts 注入，也沒有被 background.js importScripts`
+      );
+    });
+
+  // 載入順序也要對：純函式模組必須排在使用它們的 content.js 之前
+  assert.strictEqual(injected[injected.length - 1], 'content.js',
+    'content.js 必須是最後一個，否則它依賴的函式還沒定義');
+});
+
+// ------------------------------------------------------------ 檔案規模守門
+
+test('content.js 必須維持在 coding-style 的 800 行上限內', () => {
+  /*
+   * 這條不是形式主義：content.js 是唯一同時碰 DOM、chrome API、主世界訊息與版面狀態的檔案，
+   * 一旦它繼續長大，任何一段邏輯都會再次變成「只能開瀏覽器才驗得到」。
+   * 抽出純函式的意義就在於把可測的部分留在 src/ 底下。
+   */
+  const LIMIT = 800;
+  ['content.js', 'background.js', 'popup.js'].forEach((file) => {
+    const lines = fs.readFileSync(path.join(ROOT, file), 'utf8').split('\n').length;
+    assert.ok(lines <= LIMIT, `${file} 有 ${lines} 行，超過 ${LIMIT} 行上限`);
+  });
 });
