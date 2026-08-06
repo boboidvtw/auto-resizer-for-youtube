@@ -1,7 +1,9 @@
 # Project Context & Handoff Log - Auto Resizer for YouTube™
 
-> Last Closed: 2026-08-05T14:56:07+08:00 (v3.0.0 收尾 — 商店素材補齊，程式碼零變更)
-> 前一版：2026-08-05 (v3.0.0 — Chrome Web Store 上架前合規整備, commit ad6e4f8)
+> Last Closed: 2026-08-06T17:52:36+08:00 (**v3.0.0 已上架 Chrome Web Store**；
+> 商店圖示產生腳本 + 留白守門；repo 與本機資料夾改名為 `auto-resizer-for-youtube`)
+> 前一版：2026-08-05T14:56:07+08:00 (v3.0.0 收尾 — 商店素材補齊，程式碼零變更)
+> 更前一版：2026-08-05 (v3.0.0 — Chrome Web Store 上架前合規整備, commit ad6e4f8)
 > 更前一版：2026-08-04T20:54:25+08:00 (v2.3.0, code commit b7c4eb2 — 4K / 多螢幕適配；
 > 跨螢幕拖曳實測於 d3b4686 補記)
 
@@ -39,10 +41,25 @@ repo 內零寫死絕對路徑（`tests/run-e2e.sh` 用 `BASH_SOURCE`、`tests/e2
 送審當天即通過，沒有退件。已驗證商店頁：名稱 `Auto Resizer for YouTube™`、
 自製圖示、截圖、v3.0.0、隱私權政策連結皆正確。
 
-⚠️ **商店頁的 Support URL 仍是改名前的舊 repo 網址**
-（`.../youtube-auto-resizer-extension/issues`）—— 送審前填的，repo 改名後沒回頭改 Dashboard。
-GitHub 會重導所以不會斷，但欄位裡還帶著以商標開頭的舊名。**這個欄位只能在 Developer
-Dashboard 改，不在版控裡**，下次進後台時順手修掉。
+### Support URL 修正（2026-08-06 已提交，待審核）
+
+商店頁的 Support URL 原本仍是改名前的 `.../youtube-auto-resizer-extension/issues`
+（送審前填的，repo 改名後沒回頭改 Dashboard）。**2026-08-06 已在 Developer Dashboard
+改為 `https://github.com/boboidvtw/auto-resizer-for-youtube/issues`，等待審核。**
+
+⚠️ **商店資訊欄位的修改也要過審才會上線**，不是即時生效 —— 2026-08-06 提交後查公開商店頁，
+顯示的仍是舊網址。這是預期行為，不是改失敗。這類 metadata 修改**不需要動版號、不必重傳 zip**。
+
+**過審驗證方式**（開公開商店頁抓，不是看 Dashboard 顯示什麼）：
+
+```bash
+curl -s "https://chromewebstore.google.com/detail/auto-resizer-for-youtube/kbeeadfnblmodcbjhijdkoebfejkncgd" \
+  | grep -c "youtube-auto-resizer-extension"
+```
+
+回 `0` 就是過審生效了。
+
+**這個欄位不在版控裡** —— 商店後台是版控外的一份副本，`grep` 掃不到，只能開實際頁面確認。
 
 ### 上架後續（維運期）
 
@@ -161,8 +178,8 @@ Chrome 工具列實際顯示的就是 16px —— 256 個像素撐不起四個�
       測試也拿它當對照組——否則檢查退化成「永遠通過」不會有人發現。
 - [ ] **送審**：上傳 `dist/auto-resizer-for-youtube-v3.0.0.zip`，填表照 `store-assets/store-listing.md`。
 - [x] ~~上架後把商店連結補進 README、專案首頁與 `bobo-labs` 的 project card~~ **2026-08-05 完成**。
-- [ ] **Developer Dashboard 的 Support URL 還指向舊 repo 名稱**（見上方 🎉 段落）。
-      只能在後台改，版控裡改不到。
+- [ ] **確認 Support URL 的修正已過審**（2026-08-06 提交，見上方 🎉 段落附的 curl 驗證指令）。
+      商店資訊修改要過審才上線，不是即時生效。
 
 ---
 
