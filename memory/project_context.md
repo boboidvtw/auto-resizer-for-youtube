@@ -31,10 +31,31 @@ repo 內零寫死絕對路徑（`tests/run-e2e.sh` 用 `BASH_SOURCE`、`tests/e2
 
 ---
 
-## 📮 2026-08-05 已送審（待審查）
+## 🎉 2026-08-05 v3.0.0 已通過審核並發布（公開）
 
-`dist/auto-resizer-for-youtube-v3.0.0.zip` 已上傳 Chrome Web Store，Developer Dashboard
-狀態為**待審查**。填表逐欄的對照文字保留在 `store-assets/store-listing.md`
+**商店網址**：<https://chromewebstore.google.com/detail/auto-resizer-for-youtube/kbeeadfnblmodcbjhijdkoebfejkncgd>
+**商店版 ID**：`kbeeadfnblmodcbjhijdkoebfejkncgd`（Google 指派，與未封裝安裝的路徑推導 ID 是兩回事）
+
+送審當天即通過，沒有退件。已驗證商店頁：名稱 `Auto Resizer for YouTube™`、
+自製圖示、截圖、v3.0.0、隱私權政策連結皆正確。
+
+⚠️ **商店頁的 Support URL 仍是改名前的舊 repo 網址**
+（`.../youtube-auto-resizer-extension/issues`）—— 送審前填的，repo 改名後沒回頭改 Dashboard。
+GitHub 會重導所以不會斷，但欄位裡還帶著以商標開頭的舊名。**這個欄位只能在 Developer
+Dashboard 改，不在版控裡**，下次進後台時順手修掉。
+
+### 上架後續（維運期）
+
+- 改版流程：改 `manifest.json` 版號 → 補 `CHANGELOG.md` 對應段落（CI 會擋不一致）→
+  `bash tools/package.sh` → 上傳新 zip。**同一版號只能上傳一次。**
+- 監看：Dashboard 的評分／使用者數；YouTube Polymer 版面若改動（`theater` /
+  `full-bleed-player` 屬性名、`#columns` 的 min-width 算法）會讓版面邏輯失效。
+
+---
+
+## 📮 2026-08-05 送審紀錄
+
+`dist/auto-resizer-for-youtube-v3.0.0.zip` 上傳 Chrome Web Store。填表逐欄的對照文字保留在 `store-assets/store-listing.md`
 （三語 description、single purpose 說明、每個權限的 justification）——
 **被退件後修正重傳時要照著改，並且 `manifest.json` 的 version 必須往上加**
 （同一版號只能上傳一次），CI 會檢查 CHANGELOG 有對應段落。
@@ -139,7 +160,9 @@ Chrome 工具列實際顯示的就是 16px —— 256 個像素撐不起四個�
       CI 另加一條**負向驗證**（滿版的 `icons/icon.png` 必須被擋下），
       測試也拿它當對照組——否則檢查退化成「永遠通過」不會有人發現。
 - [ ] **送審**：上傳 `dist/auto-resizer-for-youtube-v3.0.0.zip`，填表照 `store-assets/store-listing.md`。
-- [ ] 上架後把商店連結補進 README、專案首頁與 `bobo-labs` 的 project card。
+- [x] ~~上架後把商店連結補進 README、專案首頁與 `bobo-labs` 的 project card~~ **2026-08-05 完成**。
+- [ ] **Developer Dashboard 的 Support URL 還指向舊 repo 名稱**（見上方 🎉 段落）。
+      只能在後台改，版控裡改不到。
 
 ---
 

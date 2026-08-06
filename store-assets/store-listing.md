@@ -1,5 +1,18 @@
 # Chrome Web Store 上架填表對照表
 
+> ## ✅ v3.0.0 已於 2026-08-05 通過審核並發布（公開）
+>
+> **商店網址**：<https://chromewebstore.google.com/detail/auto-resizer-for-youtube/kbeeadfnblmodcbjhijdkoebfejkncgd>
+> **商店版擴充功能 ID**：`kbeeadfnblmodcbjhijdkoebfejkncgd`（由 Google 指派，與未封裝安裝的路徑推導 ID 無關）
+>
+> ⚠️ **待修**：商店頁的 **Support URL** 仍是改名前的
+> `https://github.com/boboidvtw/youtube-auto-resizer-extension/issues`。
+> 那是送審前填的，repo 改名後沒回頭改 Dashboard。GitHub 會重導所以不會斷，
+> 但欄位裡還帶著以商標開頭的舊名，下次進 Dashboard 時順手改成
+> `https://github.com/boboidvtw/auto-resizer-for-youtube/issues`。
+>
+> 本檔以下內容保留為**改版重傳時的填表依據**。
+
 > 對應 v3.0.0 · 建立 2026-08-05
 > 所有欄位的值都取自本 repo 的實際檔案（`manifest.json` / `_locales/` / `PRIVACY.md`），
 > 改動那些檔案後記得回來同步這一份。

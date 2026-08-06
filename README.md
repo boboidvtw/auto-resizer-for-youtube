@@ -4,11 +4,13 @@
 > Resize the YouTube player to fit your window, quality and **display**, lock playback quality, and pop the video out
 > onto the screen you choose — 4K and multi-monitor aware, Manifest V3.
 
+[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-v3.0.0-4285F4.svg)](https://chromewebstore.google.com/detail/auto-resizer-for-youtube/kbeeadfnblmodcbjhijdkoebfejkncgd)
 [![CI](https://github.com/boboidvtw/auto-resizer-for-youtube/actions/workflows/test.yml/badge.svg)](https://github.com/boboidvtw/auto-resizer-for-youtube/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-brightgreen.svg)](https://developer.chrome.com/docs/extensions/mv3/intro/)
 [![i18n](https://img.shields.io/badge/i18n-en%20%7C%20zh__TW%20%7C%20ja-blue.svg)](_locales)
 
+**[▸ 從 Chrome 線上應用程式商店安裝](https://chromewebstore.google.com/detail/auto-resizer-for-youtube/kbeeadfnblmodcbjhijdkoebfejkncgd)** ·
 **專案首頁**：<https://labs.moneyai168.com/projects/auto-resizer-for-youtube/> ·
 **隱私權政策**：[PRIVACY.md](PRIVACY.md) ·
 **版本紀錄**：[CHANGELOG.md](CHANGELOG.md)
@@ -74,7 +76,12 @@ grep -rniE "fetch\(|XMLHttpRequest|https?://" --include="*.js" --include="*.html
 
 ## 🚀 安裝 (Installation)
 
-Chrome 線上應用程式商店審核中。目前請以開發者模式載入：
+**[▸ Chrome 線上應用程式商店](https://chromewebstore.google.com/detail/auto-resizer-for-youtube/kbeeadfnblmodcbjhijdkoebfejkncgd)**（v3.0.0，2026-08-05 上架）
+
+Chrome、Brave、Edge 等 Chromium 瀏覽器皆可安裝。
+
+<details>
+<summary>開發者模式載入（開發用）</summary>
 
 ```bash
 git clone https://github.com/boboidvtw/auto-resizer-for-youtube.git
@@ -83,6 +90,11 @@ git clone https://github.com/boboidvtw/auto-resizer-for-youtube.git
 1. 開啟 `chrome://extensions`
 2. 開啟右上角**開發者模式 (Developer mode)**
 3. 點**載入未壓縮擴充功能 (Load unpacked)**，選擇本專案資料夾
+
+⚠️ 未封裝安裝的擴充功能 ID 由**絕對路徑**決定，搬動資料夾等於換一個擴充功能，
+設定不會跟過來。商店版的 ID 則固定為 `kbeeadfnblmodcbjhijdkoebfejkncgd`。
+
+</details>
 
 ---
 
