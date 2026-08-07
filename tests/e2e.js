@@ -14,52 +14,9 @@
  */
 
 const PORT = process.argv[2] || '9340';
-const crypto = require('node:crypto');
-const path = require('node:path');
-/** unpacked extension ID = 絕對路徑 SHA256 前 32 hex，各自映射 0-9a-f -> a-p */
-const EXT_ROOT = path.resolve(__dirname, '..');
-const EXT_ID = crypto.createHash('sha256').update(EXT_ROOT).digest('hex').slice(0, 32)
-  .split('').map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
-const BASE = `http://127.0.0.1:${PORT}`;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const { Sess, connect, sleep, EXT_ID } = require('./cdp.js');
 
-class Sess {
-  constructor(ws) {
-    this.ws = ws; this.id = 0; this.pending = new Map(); this.errors = [];
-    ws.addEventListener('message', (e) => {
-      const m = JSON.parse(e.data);
-      if (m.id && this.pending.has(m.id)) {
-        const { res, rej } = this.pending.get(m.id); this.pending.delete(m.id);
-        m.error ? rej(new Error(JSON.stringify(m.error))) : res(m.result);
-      } else if (m.method === 'Runtime.exceptionThrown') {
-        this.errors.push(m.params.exceptionDetails.text + ' ' + (m.params.exceptionDetails.exception?.description || '').slice(0, 200));
-      }
-    });
-  }
-  send(method, params = {}) {
-    const id = ++this.id;
-    return new Promise((res, rej) => {
-      this.pending.set(id, { res, rej });
-      this.ws.send(JSON.stringify({ id, method, params }));
-      setTimeout(() => { if (this.pending.delete(id)) rej(new Error('timeout ' + method)); }, 30000);
-    });
-  }
-  async eval(expression) {
-    const r = await this.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
-    if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
-    return r.result.value;
-  }
-  static async open(wsUrl) {
-    const ws = new WebSocket(wsUrl);
-    await new Promise((res, rej) => { ws.addEventListener('open', res, { once: true }); ws.addEventListener('error', rej, { once: true }); });
-    const s = new Sess(ws);
-    await s.send('Runtime.enable');
-    return s;
-  }
-}
-
-const targets = () => fetch(`${BASE}/json/list`).then((r) => r.json());
-const findPage = async (pred) => (await targets()).find((t) => t.type === 'page' && pred(t));
+const { targets, findPage } = connect(PORT);
 
 const PROBE = `(() => {
   const flexy = document.querySelector('ytd-watch-flexy');
@@ -114,6 +71,32 @@ const UHD_VIEWPORT_WIDTH = 3000;
 /** 側欄原本的寬度；並排時被 flex-grow 拉超過這個倍數就是版面壞了 */
 const SIDEBAR_WIDTH = 400;
 const SIDEBAR_MAX_RATIO = 1.6;
+
+/**
+ * 兩欄是否在同一列。
+ *
+ * 不能用「側欄寬度接近播放器寬度」來反推換行：播放器縮到最小寬度（426px）時，
+ * 一個正常的 400px 側欄就會滿足那個條件，於是「並排卻被拉寬」的情境會被誤判成「已換行」
+ * 而放行。位置才是可靠的判準。
+ */
+const sameRow = (p) => !!p.primary && !!p.secondary
+  && Math.abs(p.secondary.top - p.primary.top) < 80;
+
+/** 設定要花時間走完：YouTube 自己換畫質幾秒，content.js 的降畫質還有 4s settle */
+const SETTLE_MS = 14000;
+
+/** 這支影片是不是直式（Shorts / 手機直拍） */
+const isPortrait = (p) => {
+  const [w, h] = (p.videoNative || '').split('x').map(Number);
+  return w > 0 && h > 0 && h > w;
+};
+
+/**
+ * 要求本次執行必須是直式影片。
+ * 直式驗證最容易變成假通過：影片沒載入時 videoWidth 是 0，長寬比基準會退回 16:9，
+ * 於是整段檢查變成拿 16:9 比 16:9。用環境變數明示意圖，跑錯影片就直接紅。
+ */
+const EXPECT_PORTRAIT = process.env.EXPECT_PORTRAIT === '1';
 
 (async () => {
   // ---------- 1. 一般兩欄模式 ----------
@@ -226,7 +209,7 @@ const SIDEBAR_MAX_RATIO = 1.6;
      * 播放器 3312 + 間距 24 + 側欄 400 = 3736 仍放得下，正確行為就是並排。
      * 真正不能接受的是第三種：並排但被 flex-grow 拉成 1900px 寬。
      */
-    const autoWrapped = auto.secondary.w > auto.primary.w * 0.9;
+    const autoWrapped = !sameRow(auto);
     check('側欄要嘛換行撐滿、要嘛並排且未被拉寬',
       autoWrapped || auto.secondary.w <= SIDEBAR_WIDTH * SIDEBAR_MAX_RATIO,
       `primary=${auto.primary.w} secondary=${auto.secondary.w} 換行=${autoWrapped}`);
@@ -235,10 +218,140 @@ const SIDEBAR_MAX_RATIO = 1.6;
       `\n[螢幕] viewport ${auto.viewport.w}x${auto.viewport.h} @${auto.dpr}x`
       + ` | screen ${auto.screen.w}x${auto.screen.h} (avail ${auto.screen.aw}x${auto.screen.ah})`
       + ` | 播放器實體像素 ${Math.round(auto.moviePlayer.w * auto.dpr)}`
-      + ` | 畫質 ${auto.quality} | 可用 ${(auto.availableQualities || []).join(',') || '未知'}\n`
+      + ` | 畫質 ${auto.quality} | 可用 ${(auto.availableQualities || []).join(',') || '未知'}`
+      + ` | 影片原生 ${auto.videoNative || '未載入'}\n`
     );
 
-    // ---------- 1b. 高解析度螢幕專屬門檻 ----------
+    // ---------- 1b. 直式 / 非 16:9 影片 ----------
+    /*
+     * 用 EXPECT_PORTRAIT=1 搭配一支直式影片的 VIDEO= 來跑。
+     *
+     * 畫質必須釘死。實測 YouTube 對**同一支** Short 在不同 session 會給兩種串流：
+     * 真正的 9:16（hd720 = 720x1280）或塞進 16:9 的 padded 版（1920x1080）。auto 之下
+     * 量到哪一種純看運氣，於是「驗證直式影片」有一半機率其實在驗 16:9。
+     * 720p 的 rendition 實測穩定是 720x1280，釘住它答案才可重現。
+     */
+    if (EXPECT_PORTRAIT) {
+      const portraitSettings = (mode) => SETTINGS(mode, {
+        displayAwareQuality: false,
+        preferredQuality: '720p'
+      });
+      const applyPortrait = async (mode) => {
+        await panel.eval(`new Promise(r => chrome.storage.sync.set({ yt_auto_resizer_settings: ${portraitSettings(mode)} }, r))`);
+        await sleep(SETTLE_MS);
+        return main.eval(PROBE);
+      };
+
+      /*
+       * 拿到直式串流本身是機率事件，重載幾次提高命中率。
+       * 實測同一支影片、同樣的設定，有時給 720x1280（真 9:16），有時給 1280x720
+       * （把直式內容嵌進 16:9 的 padded 版）—— 決定權在 YouTube 端，我們控制不了。
+       */
+      let pNative = null;
+      let pAuto = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        pNative = await applyPortrait('default');
+        pAuto = await applyPortrait('autoByQuality');
+        if (isPortrait(pNative) && isPortrait(pAuto)) break;
+        console.log(`[直式] 第 ${attempt} 次拿到的是 ${pNative.videoNative}／${pAuto.videoNative}，重載再試`);
+        if (attempt < 3) {
+          await main.send('Page.reload', { ignoreCache: true });
+          await sleep(12000);
+        }
+      }
+
+      if (!(isPortrait(pNative) && isPortrait(pAuto))) {
+        /*
+         * 刻意「略過」而不是「失敗」：這條紅燈不代表產品壞了，只代表 YouTube 這次給了
+         * padded 串流。把不可控的外部條件做成紅燈，換來的是一條沒人相信的檢查。
+         * 但也絕不能安靜通過——真正的守門在 unit.test.js（長寬比推導與防漂移），
+         * 這裡負責在跑不到的時候講清楚跑不到。
+         */
+        console.log(
+          `\n[略過] 三次都沒拿到直式串流（default=${pNative.videoNative} auto=${pAuto.videoNative}）。`
+          + '\n        YouTube 會逐 session 決定要給 9:16 還是塞進 16:9 的 padded 版，這不受我們控制。'
+          + '\n        直式版面的守門在 unit.test.js（yarLayoutAspectRatio / 防漂移），本次未經真機複驗。\n'
+        );
+      }
+
+      if (isPortrait(pNative) && isPortrait(pAuto)) {
+        /*
+         * 關鍵在於比「使用者真的看得到的影像」而不是「播放器容器」。
+         * <video> 元素套了 object-fit: contain，容器被撐寬時元素框跟著寬，
+         * 但裡面的影像仍是原長寬比 —— 只看容器會得到「變大了」的錯誤結論。
+         * 這正是修正前的實測：容器 1280x720 看起來比原生 1038x780 寬，
+         * 可見影像卻從 439x780 掉到 405x720。
+         */
+        const visible = (p) => {
+          const [nw, nh] = p.videoNative.split('x').map(Number);
+          const ratio = nw / nh;
+          return {
+            w: Math.min(p.video.w, Math.round(p.video.h * ratio)),
+            h: Math.min(p.video.h, Math.round(p.video.w / ratio))
+          };
+        };
+        const vn = visible(pNative);
+        const va = visible(pAuto);
+        const areaGain = (va.w * va.h) / (vn.w * vn.h);
+
+        check('[直式] 可見影像不得比 YouTube 原生小',
+          va.w >= vn.w && va.h >= vn.h,
+          `原生 ${vn.w}x${vn.h} -> 自動 ${va.w}x${va.h}（面積 ${(areaGain * 100 - 100).toFixed(1)}%）`);
+
+        check('[直式] 播放器容器要跟著影片長寬比，不得被壓成 16:9',
+          pAuto.moviePlayer.h > pAuto.moviePlayer.w,
+          `容器 ${pAuto.moviePlayer.w}x${pAuto.moviePlayer.h}`
+          + `（16:9 會是寬>高；影片 ${pAuto.videoNative}）`);
+
+        check('[直式] 無橫向溢出', !pAuto.overflow,
+          `scrollW=${pAuto.scrollW} viewport=${pAuto.viewport.w}`);
+
+        check('[直式] 沒有吃掉視窗高度以外的空間',
+          pAuto.moviePlayer.h <= pAuto.viewport.h,
+          `容器高 ${pAuto.moviePlayer.h} / 視窗高 ${pAuto.viewport.h}`);
+
+        console.log(
+          `\n[直式實測] 影片 ${pAuto.videoNative}`
+          + ` | 原生 容器 ${pNative.moviePlayer.w}x${pNative.moviePlayer.h} 可見 ${vn.w}x${vn.h}`
+          + ` | 自動 容器 ${pAuto.moviePlayer.w}x${pAuto.moviePlayer.h} 可見 ${va.w}x${va.h}`
+          + ` | 面積 ${(areaGain * 100 - 100).toFixed(1)}%\n`
+        );
+      }
+    }
+
+    // ---------- 1c. 小播放器情境：側欄不得吃光剩餘空間 ----------
+    /*
+     * 釘死 240p 並關掉螢幕感知，把播放器壓到最小寬度，視窗剩下的空間全部暴露給側欄的
+     * flex-grow。這正是 v2.2.0 觀察到「240p 影片下側欄被拉成 1150px」的情境。
+     * 4K 那條對應的檢查在內建螢幕上跑不到（它需要 3840px 的視窗），所以要另外有一條。
+     */
+    const pinnedSettings = SETTINGS('autoByQuality', {
+      displayAwareQuality: false,
+      preferredQuality: '240p'
+    });
+    await panel.eval(`new Promise(r => chrome.storage.sync.set({ yt_auto_resizer_settings: ${pinnedSettings} }, r))`);
+    await sleep(SETTLE_MS);
+    const pinned = await main.eval(PROBE);
+
+    // 前置：情境真的重現了嗎？播放器沒有縮小的話，下面那條什麼都沒守到
+    const slack = pinned.viewport.w - pinned.primary.w;
+    const pinnedReproduced = pinned.primary.w <= 700 && slack >= SIDEBAR_WIDTH * SIDEBAR_MAX_RATIO;
+    check('[小播放器] 已重現「播放器縮到最小、視窗剩餘空間遠大於側欄」的情境',
+      pinnedReproduced,
+      `player=${pinned.primary.w} viewport=${pinned.viewport.w} 剩餘=${slack}px 畫質=${pinned.quality}`);
+
+    check('[小播放器] 側欄並排時不得被 flex-grow 拉寬',
+      pinnedReproduced && (!sameRow(pinned) || pinned.secondary.w <= SIDEBAR_WIDTH * SIDEBAR_MAX_RATIO),
+      `player=${pinned.primary.w} secondary=${pinned.secondary.w}`
+      + ` (上限 ${SIDEBAR_WIDTH * SIDEBAR_MAX_RATIO}, 同列=${sameRow(pinned)}, 情境重現=${pinnedReproduced})`);
+
+    check('[小播放器] 無橫向溢出', !pinned.overflow,
+      `scrollW=${pinned.scrollW} viewport=${pinned.viewport.w}`);
+
+    await panel.eval(`new Promise(r => chrome.storage.sync.set({ yt_auto_resizer_settings: ${SETTINGS('autoByQuality')} }, r))`);
+    await sleep(4000);
+
+    // ---------- 1d. 高解析度螢幕專屬門檻 ----------
     const isUhd = auto.viewport.w >= UHD_VIEWPORT_WIDTH;
     if (isUhd) {
       /*
@@ -272,7 +385,7 @@ const SIDEBAR_MAX_RATIO = 1.6;
        * 等 QUALITY_SHRINK_SETTLE_MS(4s) 穩定才縮版面（濾 ABR 抖動）。
        * 只等 4 秒會量到還沒縮的狀態，斷言就會在情境根本沒重現的情況下通過。
        */
-      await sleep(14000);
+      await sleep(SETTLE_MS);
       const capped = await main.eval(PROBE);
 
       // 先確認情境真的重現了，否則下面那條「側欄沒被拉寬」只是在測未受限的版面
@@ -280,7 +393,7 @@ const SIDEBAR_MAX_RATIO = 1.6;
       check('[4K] 已重現「播放器被畫質原生寬鎖住」的情境', cappedReproduced,
         `quality=${capped.quality} player=${capped.primary.w}（預期 hd1080 / <=2000）`);
 
-      const sidebarWrapped = capped.secondary.w > capped.primary.w * 0.9;
+      const sidebarWrapped = !sameRow(capped);
       check('[4K] 畫質受限時側欄不被 flex-grow 拉寬',
         cappedReproduced && !sidebarWrapped && capped.secondary.w <= SIDEBAR_WIDTH * SIDEBAR_MAX_RATIO,
         `player=${capped.primary.w} secondary=${capped.secondary.w}`
@@ -395,13 +508,33 @@ const SIDEBAR_MAX_RATIO = 1.6;
      * 全新的測試 profile 媒體互動分數為零，YouTube 會擋掉彈出視窗的自動播放，
      * 影片中繼資料因此不會載入（videoWidth 維持 0）。此時校正用的是 16:9 退路值，
      * 就拿 16:9 當基準比對，否則會拿 NaN 去比而得到假失敗。
+     *
+     * ⚠️ 但這條退路會讓「驗證非 16:9 影片」整段變成假通過：基準是 16:9、內容區也是 16:9，
+     * 斷言必然成立，而真正要驗的東西（長寬比有沒有跟著影片走）根本沒被碰到。
+     * run-e2e.sh 已加 --autoplay-policy=no-user-gesture-required 讓中繼資料load得到，
+     * 這裡再加一條硬性檢查把「沒載到」變成紅燈而不是靜默降級。
      */
     const [nw, nh] = pp.videoNative.split('x').map(Number);
     const loaded = nw > 0 && nh > 0;
     const nativeRatio = loaded ? nw / nh : 16 / 9;
     const contentRatio = pp.viewport.w / pp.viewport.h;
+
+    check('彈出視窗的長寬比基準來自真實影片（不是 16:9 退路）', loaded,
+      loaded ? pp.videoNative : '影片中繼資料未載入 —— 這條檢查會退化成 16:9 比 16:9 的假通過');
+
     check('彈出視窗內容區符合影片長寬比', Math.abs(contentRatio - nativeRatio) < 0.03,
       `content=${contentRatio.toFixed(3)} 基準=${nativeRatio.toFixed(3)} (${loaded ? pp.videoNative : '影片未自動播放，用 16:9 退路'}) chrome=${pp.chromeSize.w}x${pp.chromeSize.h}`);
+
+    if (EXPECT_PORTRAIT) {
+      // 同 watch 頁：串流是不是直式由 YouTube 決定，拿不到就明講略過而不是判紅
+      if (loaded && nh > nw) {
+        check('[直式] 彈出視窗內容區跟著影片變成直式（高 > 寬）',
+          pp.viewport.h > pp.viewport.w,
+          `影片 ${pp.videoNative} 內容區 ${pp.viewport.w}x${pp.viewport.h}`);
+      } else {
+        console.log(`[略過] 彈出視窗這次拿到的是 ${pp.videoNative}（非直式串流），直式斷言未執行`);
+      }
+    }
     /*
      * 原本寫死 2000x1200 的上限在 4K 上會誤判成失敗。改用 service worker 提供的真實螢幕
      * 工作區來判斷，順便驗證多螢幕定位：popupTargetDisplay 預設 follow，
