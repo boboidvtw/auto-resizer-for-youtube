@@ -5,11 +5,25 @@
 > **商店網址**：<https://chromewebstore.google.com/detail/auto-resizer-for-youtube/kbeeadfnblmodcbjhijdkoebfejkncgd>
 > **商店版擴充功能 ID**：`kbeeadfnblmodcbjhijdkoebfejkncgd`（由 Google 指派，與未封裝安裝的路徑推導 ID 無關）
 >
-> ⚠️ **待修**：商店頁的 **Support URL** 仍是改名前的
-> `https://github.com/boboidvtw/youtube-auto-resizer-extension/issues`。
-> 那是送審前填的，repo 改名後沒回頭改 Dashboard。GitHub 會重導所以不會斷，
-> 但欄位裡還帶著以商標開頭的舊名，下次進 Dashboard 時順手改成
-> `https://github.com/boboidvtw/auto-resizer-for-youtube/issues`。
+> ⚠️ **送審時必改的兩個欄位**（2026-08-07 開公開商店頁複查，兩者都還是改名前的舊網址）：
+>
+> | Dashboard 欄位 | 線上現況 | 應改為 |
+> |---|---|---|
+> | **Support URL** | `.../youtube-auto-resizer-extension/issues` | `https://github.com/boboidvtw/auto-resizer-for-youtube/issues` |
+> | **說明文案的「OPEN SOURCE / issue tracker」段落** | `.../youtube-auto-resizer-extension` | 照本檔第 123 / 167 行貼 |
+>
+> Support URL 已於 2026-08-06 提交，**至 2026-08-07 仍未過審**（商店資訊修改也要過審，
+> 不是即時生效）。說明文案那一處**從來沒有提交過** —— 本檔在 v3.0.0 送審後才更新成新網址，
+> Dashboard 沒有跟著回填。**版控裡的副本是對的、線上的是舊的，`grep` 只掃得到前者。**
+>
+> 驗證方式一律是開公開商店頁抓，不是看 Dashboard 顯示什麼：
+>
+> ```bash
+> curl -s "https://chromewebstore.google.com/detail/auto-resizer-for-youtube/kbeeadfnblmodcbjhijdkoebfejkncgd" \
+>   | grep -c "youtube-auto-resizer-extension"
+> ```
+>
+> 回 `0` 才是兩個欄位都生效。
 >
 > 本檔以下內容保留為**改版重傳時的填表依據**。
 

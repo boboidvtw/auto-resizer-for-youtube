@@ -2,11 +2,11 @@
  * goto.js — 把測試分頁導航到指定影片，並等到播放器真的有中繼資料
  * Navigates the e2e tab to the target video and waits for real playback metadata.
  *
- * Created: 2026-08-06
+ * Created: 2026-08-07
  * 用法：node tests/goto.js <port> <url>
  *
  * 為什麼不直接把網址交給 Brave 的命令列：
- * 實測（2026-08-06）同一支直式影片，**冷啟直接開 /watch 網址**時 YouTube 一律送出塞進
+ * 實測（2026-08-07）同一支直式影片，**冷啟直接開 /watch 網址**時 YouTube 一律送出塞進
  * 16:9 的 padded 串流（1280x720）；先開 youtube.com 首頁再導航過去，則送出真正的
  * 9:16 串流（720x1280）。差別只有這一點，重試與釘畫質都改變不了。
  *

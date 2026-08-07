@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "default_locale": "en",
   "name": "__MSG_extName__",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "__MSG_extDescription__",
   "author": "boboidvtw",
   "homepage_url": "https://labs.moneyai168.com/projects/auto-resizer-for-youtube/",
@@ -29,7 +29,9 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.youtube.com/*"],
+      "matches": [
+        "https://www.youtube.com/*"
+      ],
       "js": [
         "src/config.js",
         "src/display.js",
@@ -43,8 +45,13 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["injected.js", "pageScript.js"],
-      "matches": ["https://www.youtube.com/*"]
+      "resources": [
+        "injected.js",
+        "pageScript.js"
+      ],
+      "matches": [
+        "https://www.youtube.com/*"
+      ]
     }
   ]
 }

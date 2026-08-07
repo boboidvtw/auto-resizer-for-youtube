@@ -2,7 +2,7 @@
  * pick-screen.js — 依真實螢幕排列把測試視窗移到指定螢幕
  * Positions the e2e browser window on a requested display, measured at runtime.
  *
- * Created: 2026-08-06
+ * Created: 2026-08-07
  * 用法：node tests/pick-screen.js <port> <builtin|uhd|largest|primary>
  *
  * 為什麼需要這支腳本：
@@ -151,7 +151,7 @@ const fail = (msg) => { console.error(`pick-screen: ${msg}`); process.exit(1); }
  * 每一個 chrome.windows.create 的 left/top/width/height，而且**不會有任何錯誤**——
  * API 的 callback 照樣回傳一個視窗，只是座標是旗標的值。
  *
- * 這件事在 2026-08-06 之前一直讓「彈出視窗開在來源視窗所在的螢幕 (follow)」這條 e2e
+ * 這件事在 2026-08-07 之前一直讓「彈出視窗開在來源視窗所在的螢幕 (follow)」這條 e2e
  * 檢查靜默失效：主視窗被旗標開在 1710,40，彈出視窗也被同一個旗標放到 1710,40，
  * 於是「兩者在同一台螢幕」必然成立。測試是綠的，驗到的卻是命令列旗標而不是產品程式碼。
  *

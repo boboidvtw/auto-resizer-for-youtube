@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # run-e2e.sh — 啟動獨立 Brave 實例載入本擴充功能，跑完端到端測試後關閉
 # Created: 2026-08-03
-# Updated: 2026-08-06（螢幕位置改為執行期偵測；開啟自動播放以取得影片中繼資料）
+# Updated: 2026-08-07（螢幕位置改為執行期偵測；開啟自動播放以取得影片中繼資料）
 #
 # Chrome 137+ 已停用 --load-extension，必須用 Brave。
 #
@@ -30,7 +30,7 @@ trap cleanup EXIT
 
 echo "啟動 Brave (port $PORT)，載入 $EXT"
 #
-# ⚠️ 這裡**刻意不給 --window-size / --window-position**（2026-08-06 實測後移除）。
+# ⚠️ 這裡**刻意不給 --window-size / --window-position**（2026-08-07 實測後移除）。
 # Brave 會把這兩個旗標套用到之後每一個 chrome.windows.create 出來的視窗上，
 # 完全覆蓋 API 指定的 left/top/width/height。實測同一支探測腳本：
 #   有旗標：要求 {left:1762, top:30, 3737x2130} -> 實得 {left:0, top:40, 1280x800}

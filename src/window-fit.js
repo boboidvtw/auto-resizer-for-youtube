@@ -2,7 +2,7 @@
  * window-fit.js — 瀏覽器視窗尺寸請求與彈出視窗閉環校正的計算核心（純函式，無副作用）
  * Pure geometry for browser-window sizing and pop-out player calibration.
  *
- * Created: 2026-08-06
+ * Created: 2026-08-07
  * 依賴 (depends on): src/config.js（YAR_LAYOUT / YAR_QUALITY_WIDTH / yarQualityWidthOf）、
  *                    src/layout.js（yarReservePageWidth）
  * 載入端 (loaded by): content script (isolated world)

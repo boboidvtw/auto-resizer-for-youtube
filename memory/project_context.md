@@ -1,6 +1,6 @@
 # Project Context & Handoff Log - Auto Resizer for YouTube™
 
-> Last Closed: 2026-08-06（**Next Session Goals 的 4 項全部處理完畢**；見下方「2026-08-06」段落）
+> Last Closed: 2026-08-07（**Next Session Goals 的 4 項全部處理完畢**；見下方「2026-08-07」段落）
 > 前一版：2026-08-06T17:52:36+08:00 (**v3.0.0 已上架 Chrome Web Store**；
 > 商店圖示產生腳本 + 留白守門；repo 與本機資料夾改名為 `auto-resizer-for-youtube`)
 > 前一版：2026-08-05T14:56:07+08:00 (v3.0.0 收尾 — 商店素材補齊，程式碼零變更)
@@ -14,7 +14,7 @@
 單元 + i18n 測試 **70/70 綠**（`node --test tests/unit.test.js tests/i18n.test.js`）；
 e2e 本次未重跑（需要 Brave + 真實 YouTube，程式碼未動故沿用 v3.0.0 的結果）。
 
-## 🧹 2026-08-06 — 清掉 Next Session Goals 的四項待辦
+## 🧹 2026-08-07 — 清掉 Next Session Goals 的四項待辦
 
 單元測試 74 → **97 全綠**；e2e 內建 **40/40**、4K **46/46**。`tools/package.sh` 乾淨。
 
@@ -183,6 +183,22 @@ curl -s "https://chromewebstore.google.com/detail/auto-resizer-for-youtube/kbeea
 
 **這個欄位不在版控裡** —— 商店後台是版控外的一份副本，`grep` 掃不到，只能開實際頁面確認。
 
+#### 2026-08-07 複查：**尚未過審，而且不只一個欄位是舊的**
+
+上面那條 curl 回 **3**（不是 0），新網址回 **0**。逐一看命中的位置，發現是**兩個不同欄位**：
+
+| 欄位 | 現況 | 是否已提交修改 |
+|---|---|---|
+| Support URL | `.../youtube-auto-resizer-extension/issues` | ✅ 2026-08-06 已提交，**仍待審** |
+| **商店說明的「OPEN SOURCE / issue tracker」段落** | `.../youtube-auto-resizer-extension` | ❌ **從來沒改過** |
+
+第二個原本不在追蹤範圍內。`store-assets/store-listing.md` 裡的文案**早就是新網址**（第 123 / 167 行），
+但那是 v3.0.0 送審**之後**才更新的，Dashboard 沒有跟著回填 —— 於是版控裡的副本是對的、
+線上的是舊的，而 `grep` 只掃得到前者。**這正是「商店後台是版控外的一份副本」的具體代價。**
+
+GitHub 會重導所以不會斷，但欄位裡仍帶著以商標開頭的舊名（那正是 v3.0.0 改名的理由）。
+**下次送審時兩個欄位一起改**，說明文案直接照 `store-assets/store-listing.md` 貼。
+
 ### 上架後續（維運期）
 
 - 改版流程：改 `manifest.json` 版號 → 補 `CHANGELOG.md` 對應段落（CI 會擋不一致）→
@@ -300,8 +316,10 @@ Chrome 工具列實際顯示的就是 16px —— 256 個像素撐不起四個�
       測試也拿它當對照組——否則檢查退化成「永遠通過」不會有人發現。
 - [ ] **送審**：上傳 `dist/auto-resizer-for-youtube-v3.0.0.zip`，填表照 `store-assets/store-listing.md`。
 - [x] ~~上架後把商店連結補進 README、專案首頁與 `bobo-labs` 的 project card~~ **2026-08-05 完成**。
-- [ ] **確認 Support URL 的修正已過審**（2026-08-06 提交，見上方 🎉 段落附的 curl 驗證指令）。
-      商店資訊修改要過審才上線，不是即時生效。
+- [ ] **確認 Support URL 的修正已過審**（2026-08-06 提交；**2026-08-07 複查仍未生效**，
+      curl 回 3 而非 0）。商店資訊修改要過審才上線，不是即時生效。
+      ⚠️ 同時發現**商店說明的「OPEN SOURCE / issue tracker」段落也還是舊網址且從未提交修改**，
+      下次送審要兩個欄位一起改（見上方 🎉 段落的 2026-08-07 複查表）。
 
 ---
 
@@ -422,7 +440,7 @@ YouTube player 物件（頁面可控），原本用 `YAR_QUALITY_WIDTH[code] || 
 
 跑法：`bash tests/run-e2e.sh`（內建）／`SCREEN=uhd bash tests/run-e2e.sh`（4K）。
 ~~⚠️ `run-e2e.sh` 的 `uhd` 座標寫死 `1710,40`，螢幕排列改變就要重新量。~~
-**2026-08-06 已不再寫死**，改由 `tests/pick-screen.js` 執行期偵測（見本檔 2026-08-06 段落）。
+**2026-08-07 已不再寫死**，改由 `tests/pick-screen.js` 執行期偵測（見本檔 2026-08-07 段落）。
 
 ---
 
@@ -578,9 +596,9 @@ YouTube player 物件（頁面可控），原本用 `YAR_QUALITY_WIDTH[code] || 
 ```
 
 ~~`--window-position` 的 y 給 40 避開 macOS 選單列。~~
-⚠️ **2026-08-06 更正：`--window-size` / `--window-position` 這兩個旗標不可以用。**
+⚠️ **2026-08-07 更正：`--window-size` / `--window-position` 這兩個旗標不可以用。**
 Brave 會拿它們覆蓋之後每一個 `chrome.windows.create` 的座標而且不報錯，
-讓所有「視窗開在哪台螢幕」的檢查失去意義（詳見本檔 2026-08-06 段落）。
+讓所有「視窗開在哪台螢幕」的檢查失去意義（詳見本檔 2026-08-07 段落）。
 視窗位置改由 `tests/pick-screen.js` 在啟動後用 `chrome.windows.update` 設定。
 端到端腳本已進版控：`tests/e2e.js` + `tests/run-e2e.sh`（一鍵跑）。
 
@@ -613,20 +631,20 @@ Brave 會拿它們覆蓋之後每一個 `chrome.windows.create` 的座標而且�
 ## 🎯 Next Session Goals
 
 - [x] ~~**拖曳視窗跨螢幕的即時反應未實測**~~ **2026-08-04 手動實測完成，見下方「跨螢幕拖曳實測」。**
-- [x] ~~**`content.js` 已 661 行**~~ **2026-08-06 完成**：抽出 `src/quality-policy.js` 與
+- [x] ~~**`content.js` 已 661 行**~~ **2026-08-07 完成**：抽出 `src/quality-policy.js` 與
       `src/window-fit.js`，662 → 581 行，並加了 800 行的守門測試。
-- [x] ~~`SCREEN=uhd` 的 e2e 視窗座標寫死 `1710,40`~~ **2026-08-06 完成**：改由
+- [x] ~~`SCREEN=uhd` 的 e2e 視窗座標寫死 `1710,40`~~ **2026-08-07 完成**：改由
       `tests/pick-screen.js` 在執行期問 `chrome.system.display`。副產品是發現
-      `--window-position` 一直在讓彈出視窗定位的檢查失效（見上方 2026-08-06 段落）。
+      `--window-position` 一直在讓彈出視窗定位的檢查失效（見上方 2026-08-07 段落）。
 
 - [x] ~~設定面板端到端未測~~ **已完成**：e2e 直接開 `chrome-extension://<id>/popup.html`
       並用它寫 `chrome.storage.sync`，覆蓋 popup → storage → content script 全鏈路。
-- [x] ~~**非 16:9 影片未實測**~~ **2026-08-06 完成，而且原本的判斷是錯的**：
+- [x] ~~**非 16:9 影片未實測**~~ **2026-08-07 完成，而且原本的判斷是錯的**：
       「直式影片有黑邊＝同 YouTube 原生行為」不成立，是我們寫死的 9/16 把容器壓扁，
       可見影像比不裝擴充功能還小 14.8%。已改為跟隨影片長寬比（見上方段落）。
       ⚠️ 遺留：YouTube 逐 session 決定 Shorts 要送 9:16 還是 padded 16:9，觸發條件未查明，
       因此 e2e 的直式區塊拿不到 9:16 串流時會大聲略過，守門在 `unit.test.js`。
-- [x] ~~**側欄並排時會被拉寬**（240p 影片實測 1150px）~~ **2026-08-06 複驗：已被 v2.3.0 修掉**。
+- [x] ~~**側欄並排時會被拉寬**（240p 影片實測 1150px）~~ **2026-08-07 複驗：已被 v2.3.0 修掉**。
       同情境（player 426 / viewport 1670 / 剩餘 1244px）實測側欄 = 400px。
       已補一條內建螢幕跑得到的 e2e 檢查，含情境重現前置斷言。
 - [x] ~~**多螢幕情境未測**~~ **v2.3.0 已完成**（見上方 v2.3.0 段落）。

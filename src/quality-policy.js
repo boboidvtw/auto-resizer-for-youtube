@@ -2,7 +2,7 @@
  * quality-policy.js — 「這台螢幕現在該要什麼畫質、版面能不能放大」的決策（純函式，無副作用）
  * Pure decisions for display-aware quality selection and upscale permission.
  *
- * Created: 2026-08-06
+ * Created: 2026-08-07
  * 依賴 (depends on): src/config.js（yarQualityWidthOf）、src/display.js
  *                    （yarQualityForPlayer / yarShouldUpscale）、src/layout.js（yarPlayerWidthFor）、
  *                    src/window-fit.js（yarAspectRatioOf）—— 故 manifest 中須排在 window-fit 之後

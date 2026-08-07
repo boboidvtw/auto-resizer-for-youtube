@@ -2,7 +2,7 @@
  * content.js — 隔離世界主控：設定、樣式套用、主世界腳本注入、控制列按鈕
  * Isolated-world orchestrator.
  *
- * Updated: 2026-08-06
+ * Updated: 2026-08-07
  * 依賴 (depends on): src/config.js, src/display.js, src/layout.js,
  *                    src/quality-policy.js, src/window-fit.js（由 manifest 依序注入）
  *

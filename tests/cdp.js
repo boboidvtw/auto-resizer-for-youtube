@@ -2,7 +2,7 @@
  * cdp.js — 測試腳本共用的 Chrome DevTools Protocol 連線工具
  * Shared CDP session helper for the e2e scripts.
  *
- * Created: 2026-08-06
+ * Created: 2026-08-07
  * 零相依：只用 Node 內建的 WebSocket 與 fetch。
  *
  * 由 tests/e2e.js 與 tests/pick-screen.js 共用。抽出來的理由很實際：兩支腳本都必須用
