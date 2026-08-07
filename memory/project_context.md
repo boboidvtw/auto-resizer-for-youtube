@@ -1,6 +1,7 @@
 # Project Context & Handoff Log - Auto Resizer for YouTube™
 
-> Last Closed: 2026-08-06T17:52:36+08:00 (**v3.0.0 已上架 Chrome Web Store**；
+> Last Closed: 2026-08-06（**Next Session Goals 的 4 項全部處理完畢**；見下方「2026-08-06」段落）
+> 前一版：2026-08-06T17:52:36+08:00 (**v3.0.0 已上架 Chrome Web Store**；
 > 商店圖示產生腳本 + 留白守門；repo 與本機資料夾改名為 `auto-resizer-for-youtube`)
 > 前一版：2026-08-05T14:56:07+08:00 (v3.0.0 收尾 — 商店素材補齊，程式碼零變更)
 > 更前一版：2026-08-05 (v3.0.0 — Chrome Web Store 上架前合規整備, commit ad6e4f8)
@@ -12,6 +13,127 @@
 已補進版控並在 `store-assets/store-listing.md` 的素材表登記。
 單元 + i18n 測試 **70/70 綠**（`node --test tests/unit.test.js tests/i18n.test.js`）；
 e2e 本次未重跑（需要 Brave + 真實 YouTube，程式碼未動故沿用 v3.0.0 的結果）。
+
+## 🧹 2026-08-06 — 清掉 Next Session Goals 的四項待辦
+
+單元測試 74 → **97 全綠**；e2e 內建 **40/40**、4K **46/46**。`tools/package.sh` 乾淨。
+
+### ① content.js 662 → 581 行（抽出兩個純函式模組）
+
+- `src/quality-policy.js` — 螢幕感知決策（螢幕容量、該要什麼畫質、能不能放大、升降畫質判準）
+- `src/window-fit.js` — 視窗尺寸請求與彈出視窗閉環校正的幾何核心
+
+分工原則：**算得出答案的東西住在 `src/`，只能靠開瀏覽器驗的東西才留在 `content.js`**。
+抽出後那些不變量（「受限後只能送寬度」「升畫質立即、降畫質等 settle」）第一次有了單元測試。
+
+順帶修掉一個同類缺陷：`content.js` 的 `qualityWidth()` 用 `YAR_QUALITY_WIDTH[q] || 0`，而畫質代碼
+來自主世界的 YouTube player（頁面可控）。v2.3.0 在 `yarShouldUpscale` 修過一模一樣的問題。
+現在集中成 `src/config.js` 的 `yarQualityWidthOf()` 單一入口。
+
+新增兩條守門（**都做過反向驗證**）：
+- `src/` 底下每支檔案都必須有載入端（manifest 或 importScripts）。`package.sh` 打包的是整個
+  `src/` 目錄，漏註冊的檔案照樣進 zip、CI 照樣全綠，只有真的呼叫到才炸 ReferenceError。
+- `content.js` / `background.js` / `popup.js` 行數上限 800。
+
+### ② e2e 螢幕座標改為執行期偵測（`tests/pick-screen.js`）
+
+拿掉寫死的 `1710,40`，改問 service worker 的 `chrome.system.display` 真值，再用
+`chrome.windows.update` 定位。要求的螢幕不存在就中止（`SCREEN=uhd` 會驗到邏輯寬 >= 3840，
+單螢幕環境下不會靜默退回內建螢幕跑 4K 門檻）。
+
+### 🚨 ②的副產品：舊 e2e 有一條檢查一直在測命令列旗標
+
+`--window-position` / `--window-size` **會覆蓋之後每一個 `chrome.windows.create` 的座標**，
+而且沒有任何錯誤。實測同一支探測腳本：
+
+| 啟動旗標 | `chrome.windows.create` 要求 | 實得 |
+|---|---|---|
+| 有 `--window-size/position` | `{left:1762, top:30, 3737x2130}` | `{left:0, top:40, 1280x800}` |
+| 無 | 同上 | `{left:1762, top:30, 3737x2130}` |
+
+後果不是紅燈而是**綠燈但什麼都沒守到**：舊版把主視窗開在 `1710,40`，彈出視窗也被同一個旗標
+放到 `1710,40`，於是「彈出視窗開在來源視窗所在的螢幕 (follow)」必然成立。
+擴充功能的定位邏輯**從來沒有被真的驗證過**（修正後首次真跑：彈出視窗 `3737x2130@1762,30`）。
+
+已把旗標拿掉，並在 `pick-screen.js` 加一條 harness 自檢：每次跑之前實開一個已知座標的視窗
+回查，不照給就中止。**與其在註解裡叮嚀「不要加那兩個旗標」，不如每次實測一次。**
+
+### ③ 側欄並排被拉寬 —— 已被 v2.3.0 修掉，現在有守門
+
+補了一條內建螢幕跑得到的檢查（釘 240p + 關螢幕感知，含情境重現前置斷言）。
+實測 player=426 / viewport=1670 剩餘 1244px 之下，**側欄 = 400px**，沒有被 flex-grow 吃掉。
+v2.3.0 的 `#columns` max-width 已經解決了 240p 情境，只是當時沒有內建螢幕跑得到的檢查
+（4K 那條需要 3840px 的視窗）。
+
+順手修掉一個判斷式：原本用「側欄寬度接近播放器寬度」推論換行，但播放器縮到 426px 時
+一個正常的 400px 側欄就滿足那個條件 → 誤判成「已換行」而放行。改用**位置**（`sameRow`）。
+
+### ④ 非 16:9 影片 —— 實測後發現我們讓直式影片變**小**了，已修
+
+真機實測（Brave，內建螢幕 1670x896，一支 720x1280 的直式影片，畫質釘 720p）：
+
+| 模式 | 播放器容器 | **可見影像** |
+|---|---|---|
+| `default`（不介入） | 1038x780 | **439x780** |
+| `autoByQuality`（修正前） | 1280x720 | **405x720**（面積 −14.8%） |
+
+**本檔原本寫的「直式影片會有大片上下黑邊（同 YouTube 原生行為）」是錯的。**
+YouTube 原生會給直式影片一個高的容器；是我們的 `--yar-player-h: calc(w * 9 / 16)` 把它壓成
+16:9，逼出左右黑邊，而且比不裝擴充功能還小。
+
+修法：`yarLayoutAspectRatio()` 讓容器高度與寬度上限都跟著 `video.videoWidth/videoHeight`。
+**16:9 的輸出必須逐字相同**（含 `* 16 / 9` 的字面寫法），有專門的測試守著 ——
+絕大多數影片是 16:9，為了少數 Shorts 而讓全部影片的版面跟著變是不划算的交換。
+
+另外修 `yarNativeWidthFor()`：**YouTube 的畫質標籤指的一律是短邊**，而 `YAR_QUALITY_WIDTH`
+記的是 16:9 之下的寬（1080p → 1920）。兩個方向都會錯，而且錯的方向相反：
+
+| 影片 | 舊算法的原生寬 | 正確值 | 後果 |
+|---|---|---|---|
+| 直式 720x1280 | 1280 | 720 | 允許 2 倍上採樣 |
+| 超寬 2520x1080（21:9） | 1920 | 2520 | 播放器被白白鎖小 |
+
+⚠️ 我第一版只改了直式那半邊（`longSide × ratio`），只在**剛好 9:16** 時碰巧正確，
+3:4 直式會算出 641 而不是 480 —— 而且我把那個錯誤的期望值寫進了測試裡。
+是 code review 抓出來的。正解是先還原短邊（`寬 × 9/16`）再依方向乘回去。
+**教訓：拿一個特例驗證出來的公式，很容易連測試一起錯。**
+
+### 待辦（本輪未做）
+
+- [ ] **`yarDisplayCeilingWidth()` 估算螢幕容量時仍固定用 16:9**，即使版面本身已經跟著長寬比走。
+      這是刻意的，不是漏接：只把長寬比接進去會讓直式影片**要到更低的畫質**——下游的
+      `yarQualityForPlayer()` 比對的是 `YAR_QUALITY_WIDTH`（16:9 的寬度表），而直式影片的
+      「720p」只有 720 寬。實測一支 720x1280：播放器 459 CSS × DPR 2 = 918 實體像素，
+      容量若估成 459 就會挑到 hd720（720 寬），餵不滿。
+      要真的修正，`yarQualityForPlayer()` 必須一起變成長寬比感知。
+      現況的方向是「寧可多要一點畫質」，不會讓畫面變糊，所以不急。
+
+⚠️ **未解：YouTube 會逐 session 決定 Shorts 要送 9:16 還是塞進 16:9 的 padded 串流。**
+同一支影片、同樣的設定，有時 `hd720 = 720x1280`，有時 `1280x720`。已排除的因素：
+`setPlaybackQuality` vs `setPlaybackQualityRange`（兩者都保住 9:16）、冷啟 vs 先開首頁再導航
+（`tests/goto.js` 導航當下量到 1080x1920，走完 e2e 前段後變 1280x720）。
+觸發條件沒有在合理成本內隔離出來。
+
+因此 e2e 的直式區塊（`EXPECT_PORTRAIT=1` + 直式影片的 `VIDEO=`）會重試三次，
+拿不到 9:16 串流就**大聲略過**而不是判紅 —— 把不可控的外部條件做成紅燈，換來的是一條
+沒人相信的檢查。**直式版面真正的守門在 `unit.test.js`**（長寬比推導 + 非 16:9 的防漂移測試）。
+
+實測用的直式影片：`OtV7PAtZAyA`（Shorts，`hd720 = 720x1280`）。Shorts 會失效，
+要重找可用 `youtube.com/results?search_query=%23shorts` 撈 id 再逐支量 `videoWidth/videoHeight`。
+⚠️ 量的時候必須確認 `location.href` 真的是那支影片、且讀 `#movie_player video` ——
+搜尋結果頁的內嵌預覽片會讓你量到別支影片（我踩過一次，回報 360x640 實際是 1920x1080）。
+
+### 這一輪學到的
+
+- **「測試綠」與「檢查有作用」是兩件事，而且分辨它們需要主動設計對照。** 這輪有兩條檢查
+  被發現是空的：彈出視窗定位（測到命令列旗標）、彈出視窗長寬比（影片沒載入時退回 16:9
+  比 16:9）。兩條都通過了好幾個版本。
+- **harness 的設定會偽裝成產品行為。** `--window-position` 沒有錯誤、沒有警告，只是安靜地
+  讓一條檢查失去意義。凡是「環境條件」，與其寫註解叮嚀，不如在每次執行前實測一次。
+- **量測前先確認量的是對的東西。** 導航還沒生效就讀 `document.querySelector('video')`，
+  量到的是上一頁的預覽片 —— 量錯對象比量不到危險，因為它會給你一個看起來合理的數字。
+
+---
 
 ## 📛 2026-08-05 改名（repo + 本機資料夾）
 
@@ -299,8 +421,8 @@ YouTube player 物件（頁面可控），原本用 `YAR_QUALITY_WIDTH[code] || 
 `Math.max` 得到 NaN。實測 `['hd1080','__proto__']` 舊寫法回 `false`（永遠不放大），已改用 `hasOwnProperty`。
 
 跑法：`bash tests/run-e2e.sh`（內建）／`SCREEN=uhd bash tests/run-e2e.sh`（4K）。
-⚠️ `run-e2e.sh` 的 `uhd` 座標寫死 `1710,40`，**螢幕排列改變（左右對調、換解析度）就要重新量**
-（用 `chrome.system.display.getInfo()`）。
+~~⚠️ `run-e2e.sh` 的 `uhd` 座標寫死 `1710,40`，螢幕排列改變就要重新量。~~
+**2026-08-06 已不再寫死**，改由 `tests/pick-screen.js` 執行期偵測（見本檔 2026-08-06 段落）。
 
 ---
 
@@ -455,8 +577,12 @@ YouTube player 物件（頁面可控），原本用 `YAR_QUALITY_WIDTH[code] || 
   --window-size=1600,1000 --window-position=0,40 "$URL" &
 ```
 
-`--window-position` 的 y 給 40 避開 macOS 選單列。
-端到端腳本已進版控：`tests/e2e.js` + `tests/run-e2e.sh`（一鍵跑，20 項檢查）。
+~~`--window-position` 的 y 給 40 避開 macOS 選單列。~~
+⚠️ **2026-08-06 更正：`--window-size` / `--window-position` 這兩個旗標不可以用。**
+Brave 會拿它們覆蓋之後每一個 `chrome.windows.create` 的座標而且不報錯，
+讓所有「視窗開在哪台螢幕」的檢查失去意義（詳見本檔 2026-08-06 段落）。
+視窗位置改由 `tests/pick-screen.js` 在啟動後用 `chrome.windows.update` 設定。
+端到端腳本已進版控：`tests/e2e.js` + `tests/run-e2e.sh`（一鍵跑）。
 
 ⚠️ **Brave 會偽裝 UA 成 "Google Chrome" 並移除 `navigator.brave`**，不可用 UA 判斷瀏覽器。
 ⚠️ 判斷擴充功能是否為自己的，要用「絕對路徑 SHA256 前 32 hex 映射 a-p」算 ID 比對。
@@ -487,19 +613,22 @@ YouTube player 物件（頁面可控），原本用 `YAR_QUALITY_WIDTH[code] || 
 ## 🎯 Next Session Goals
 
 - [x] ~~**拖曳視窗跨螢幕的即時反應未實測**~~ **2026-08-04 手動實測完成，見下方「跨螢幕拖曳實測」。**
-- [ ] **`content.js` 已 661 行**，逼近 `coding-style.md` 的 800 上限。
-      下次動它之前先考慮拆分（螢幕感知那一段是自然的切點）。
-- [ ] `SCREEN=uhd` 的 e2e 視窗座標寫死 `1710,40`。螢幕排列改變（左右對調、換解析度）
-      就會開到錯的地方，要用 `chrome.system.display.getInfo()` 重新量。
-      本 session 中途就遇過內建螢幕縮放被改動，不是假設性風險。
+- [x] ~~**`content.js` 已 661 行**~~ **2026-08-06 完成**：抽出 `src/quality-policy.js` 與
+      `src/window-fit.js`，662 → 581 行，並加了 800 行的守門測試。
+- [x] ~~`SCREEN=uhd` 的 e2e 視窗座標寫死 `1710,40`~~ **2026-08-06 完成**：改由
+      `tests/pick-screen.js` 在執行期問 `chrome.system.display`。副產品是發現
+      `--window-position` 一直在讓彈出視窗定位的檢查失效（見上方 2026-08-06 段落）。
 
 - [x] ~~設定面板端到端未測~~ **已完成**：e2e 直接開 `chrome-extension://<id>/popup.html`
       並用它寫 `chrome.storage.sync`，覆蓋 popup → storage → content script 全鏈路。
-- [ ] **非 16:9 影片未實測**。彈出視窗長寬比已改用 `video.videoWidth/videoHeight`
-      且單元測試涵蓋 4:3，但沒在真機驗過直式影片 / Shorts。
-      另外 watch 頁的 `--yar-player-h` 仍寫死 9/16，直式影片會有大片上下黑邊（同 YouTube 原生行為）。
-- [ ] **側欄並排時會被拉寬**（240p 影片實測 1150px）。flex-grow 讓它撿走所有剩餘空間，
-      推薦影片卡片會被拉長。要不要設上限待觀察。
+- [x] ~~**非 16:9 影片未實測**~~ **2026-08-06 完成，而且原本的判斷是錯的**：
+      「直式影片有黑邊＝同 YouTube 原生行為」不成立，是我們寫死的 9/16 把容器壓扁，
+      可見影像比不裝擴充功能還小 14.8%。已改為跟隨影片長寬比（見上方段落）。
+      ⚠️ 遺留：YouTube 逐 session 決定 Shorts 要送 9:16 還是 padded 16:9，觸發條件未查明，
+      因此 e2e 的直式區塊拿不到 9:16 串流時會大聲略過，守門在 `unit.test.js`。
+- [x] ~~**側欄並排時會被拉寬**（240p 影片實測 1150px）~~ **2026-08-06 複驗：已被 v2.3.0 修掉**。
+      同情境（player 426 / viewport 1670 / 剩餘 1244px）實測側欄 = 400px。
+      已補一條內建螢幕跑得到的 e2e 檢查，含情境重現前置斷言。
 - [x] ~~**多螢幕情境未測**~~ **v2.3.0 已完成**（見上方 v2.3.0 段落）。
       剩下未測的多螢幕子題：**把視窗從一台拖到另一台**時的即時反應。
       已實作 `matchMedia('(resolution: Ndppx)')` 監看 + 500ms debounce 的 resize 重算，

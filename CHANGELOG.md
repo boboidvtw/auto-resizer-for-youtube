@@ -7,9 +7,38 @@
 
 ## [Unreleased]
 
-擴充功能本體沒有變更（`manifest.json` 仍是 3.0.0），改的是素材產生與守門。
+### Fixed
 
-### Added
+- **直式影片（Shorts）在 watch 頁會被壓成 16:9，反而比不裝擴充功能還小。**
+  播放器容器的高度原本寫死 `寬 × 9 / 16`。真機實測（內建螢幕 1670×896、一支 720×1280 的影片）：
+  YouTube 原生給的可見影像是 439×780，我們給的是 405×720 —— **面積少了 14.8%**。
+  容器高度與寬度上限現在都跟著 `video.videoWidth/videoHeight` 走。
+  16:9 影片產生的 CSS 逐字不變，有專門的測試守著。
+- **畫質標籤指的一律是短邊**，而畫質對照表記的是 16:9 之下的寬。兩個方向原本都算錯：
+  直式 720×1280 的「720p」原生寬是 720（原本當成 1280，允許 2 倍上採樣）；
+  超寬 2520×1080 的「1080p」原生寬是 2520（原本當成 1920，播放器被白白鎖小）。
+- 畫質代碼的查表統一走 `yarQualityWidthOf()`（`hasOwnProperty` 保護）。代碼來自主世界的
+  YouTube player 物件（頁面可控），`table[code] || 0` 會沿原型鏈取到函式而不會退回 0。
+
+### Changed
+
+- `content.js` 662 → 581 行：純函式決策抽到 `src/quality-policy.js` 與 `src/window-fit.js`，
+  本體只留 DOM / chrome API / 訊息編排。行為不變。
+
+### Added（測試與工具）
+
+- `tests/pick-screen.js`：e2e 的螢幕位置改由 `chrome.system.display` 在執行期決定，
+  取代寫死的座標；要求的螢幕不存在會中止。並內建 harness 自檢 —— 實測這個瀏覽器實例
+  會不會遵守 `chrome.windows.create` 的座標（Brave 的 `--window-position` 會靜默覆蓋它，
+  這曾讓「彈出視窗開在來源螢幕」的檢查長期形同虛設）。
+- `tests/goto.js`：改為先開 YouTube 首頁再導航到影片，並等到真的有播放中繼資料。
+- `tests/cdp.js`：兩支 e2e 腳本共用的 CDP 連線工具與 extension ID 推導。
+- e2e 新增：小播放器情境的側欄寬度守門（內建螢幕跑得到）、直式影片的可見影像對照、
+  彈出視窗長寬比基準必須來自真實影片（不得退回 16:9 而變成假通過）。
+- 單元測試 74 → 97 條。新增守門：`src/` 每支檔案都必須有載入端、
+  `content.js` 行數上限、非 16:9 的防漂移比對。
+
+### Added（素材）
 
 - **`tools/png-geometry.js`**：零相依的 PNG 幾何檢查（只用 node 內建 `zlib` 解 PNG），
   除了畫布尺寸，還會真的量出不透明像素的邊界框。

@@ -105,10 +105,12 @@ auto-resizer-for-youtube/
 ├── manifest.json      # Manifest V3
 ├── _locales/          # en / zh_TW / ja 三語字串
 ├── background.js      # Service worker：設定供應、視窗調整、彈出播放器
-├── src/
+├── src/               # 純函式；凡是「算得出答案」的東西都住在這裡，因此都測得到
 │   ├── config.js      # 設定結構、版面常數、storage 與 i18n 封裝（三端共用）
-│   ├── display.js     # 顯示器分級、螢幕選擇、依螢幕的畫質決策（純函式）
-│   └── layout.js      # 播放器 CSS 產生器（純函式）
+│   ├── display.js     # 顯示器分級、螢幕選擇、依螢幕的畫質決策
+│   ├── layout.js      # 播放器 CSS 產生器（含非 16:9 影片的長寬比推導）
+│   ├── window-fit.js  # 視窗尺寸請求與彈出視窗閉環校正的幾何
+│   └── quality-policy.js # 螢幕感知的畫質決策與升降畫質判準
 ├── content.js         # 隔離世界主控：套用樣式、注入主世界腳本、控制列按鈕
 ├── injected.js        # 主世界：畫質／解析度偵測，回報給隔離世界
 ├── pageScript.js      # 主世界：透過原生 player API 設定畫質
@@ -120,6 +122,9 @@ auto-resizer-for-youtube/
     ├── icon.svg       # 單一向量來源
     └── build.sh       # 產生 16/32/48/128 PNG（需 rsvg-convert）
 ```
+
+**播放器容器跟著影片的長寬比走**，不寫死 16:9。直式影片（Shorts）若被壓成 16:9，
+可見影像會比不裝擴充功能還小 —— 實測 439×780 掉到 405×720，面積少 14.8%。
 
 **世界分工**：`injected.js` 只偵測、`pageScript.js` 只控制、`content.js` 只套版面。
 主世界對同一支影片只廣播一次狀態，隔離世界可透過 `YT_AUTO_RESIZER_REQUEST_STATE` 事件要求重播。
@@ -158,20 +163,34 @@ auto-resizer-for-youtube/
 node --test tests/*.test.js
 ```
 
-74 條，涵蓋設定正規化、版面 CSS 產生器、視窗尺寸計算、service worker 的 URL 驗證、
+98 條，涵蓋設定正規化、版面 CSS 產生器（含非 16:9 影片的長寬比推導與防漂移）、
+畫質決策、視窗尺寸與彈出視窗校正的幾何、service worker 的 URL 驗證、
 `_locales` 的翻譯一致性（key 集合、placeholder、商店長度上限、孤兒 key），
 以及商店圖示的留白規格（以 manifest 的滿版圖示為對照組）。
 
 **端到端測試**（真實載入的擴充功能 + 真實 YouTube + 真實彈出視窗）：
 
 ```bash
-bash tests/run-e2e.sh                 # 內建螢幕，36 項檢查
-SCREEN=uhd bash tests/run-e2e.sh      # 外接 4K 螢幕（含 4K 專屬門檻）
+bash tests/run-e2e.sh                 # 內建螢幕，40 項檢查
+SCREEN=uhd bash tests/run-e2e.sh      # 外接 4K 螢幕，46 項（含 4K 專屬門檻）
 ```
 
 會自動啟動獨立的 Brave 實例、載入本擴充功能，驗證設定面板、放大幅度、兩欄／劇院／彈出視窗後關閉。
+螢幕位置由 `tests/pick-screen.js` 在執行期向 `chrome.system.display` 問真實排列後決定，
+要求的螢幕不存在會中止，不會靜默跑在錯的螢幕上。
+
 其中一項是**對照檢查**：先切到 `default` 量 YouTube 原生尺寸，再切到 `autoByQuality`，
 要求播放器至少大 15%。這條就是為了擋住 v2.1 那種「跑得動、測得過、但實際只大 16px」的失效。
+
+直式影片另有一組檢查，需明示意圖才會執行（拿不到 9:16 串流時會大聲略過，不會假裝通過）：
+
+```bash
+EXPECT_PORTRAIT=1 VIDEO="https://www.youtube.com/watch?v=<直式影片>" bash tests/run-e2e.sh
+```
+
+> ⚠️ **啟動時不可加 `--window-size` / `--window-position`**：Brave 會用它們覆蓋之後每一個
+> `chrome.windows.create` 的座標，而且不報任何錯 —— 所有「視窗開在哪台螢幕」的檢查會變成
+> 在測命令列旗標。`tests/pick-screen.js` 每次執行前都會實測一次並在不符時中止。
 
 > ⚠️ **必須用 Brave，不能用 Chrome**：Chrome 137+ 已停用 `--load-extension`
 > 且不會報錯（安靜略過），`--enable-unsafe-extension-debugging` 也救不回來。
