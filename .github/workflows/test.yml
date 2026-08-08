@@ -57,6 +57,13 @@ jobs:
           # 讀到空 stdin 而直接回報無匹配，於是 package.sh 改壞、SHIP 清單被清空、或副檔名
           # 篩選失準時，這道守門會退化成永遠綠燈 —— 還會理直氣壯地印「確認 1 個檔案」。
           # 兩道防線：list 用 set -e 擋 package.sh 本身失敗，files 空則自己 exit 1。
+          #
+          # 下限守的是「萎縮」，而空值守不住它：package.sh 只驗 SHIP 清單裡每一項是否
+          # 存在於磁碟，若有人把項目從 SHIP 陣列裡整條拿掉，它沒東西可驗、照樣通過，
+          # 掃描範圍就這樣無聲縮小。8 的來歷：現有 11 支（6 個 MV3 進入點 + src/ 5 個模組），
+          # 合併 src 模組是合理重構所以留 3 支餘裕，但再少就不是重構而是被掏空了。
+          # 這個數字本來就該被人為更新 —— 要改它，就是要你先停下來確認範圍為什麼變小。
+          min_files=8
           list=$(bash tools/package.sh --list)
           files=$(echo "$list" | grep -E '\.(js|html)$' || true)
           if [ -z "$files" ]; then
@@ -64,7 +71,15 @@ jobs:
             exit 1
           fi
           count=$(echo "$files" | wc -l | tr -d ' ')
-          hits=$(echo "$files" | xargs grep -nE "fetch\(|XMLHttpRequest|navigator\.sendBeacon" || true)
+          if [ "$count" -lt "$min_files" ]; then
+            echo "::error::掃描範圍只有 $count 支檔案，低於下限 $min_files —— SHIP 清單可能被掏空了"
+            echo "$files"
+            exit 1
+          fi
+          # 用 NUL 分隔而非讓 xargs 自己斷詞：xargs 會解析輸入裡的引號與反斜線，
+          # src/ 底下哪天出現帶空白或引號的檔名就會 parse 失敗，而失敗被 `|| true`
+          # 吞掉之後 hits 為空 —— 又是一次假通過。（本機驗證時真的撞到 unterminated quote。）
+          hits=$(printf '%s\n' "$files" | tr '\n' '\0' | xargs -0 grep -nE "fetch\(|XMLHttpRequest|navigator\.sendBeacon" || true)
           if [ -n "$hits" ]; then
             echo "::error::打包檔案裡發現對外連線的呼叫，與 PRIVACY.md 的承諾牴觸："
             echo "$hits"
