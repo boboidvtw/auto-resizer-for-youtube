@@ -52,14 +52,25 @@ jobs:
           # 掃描範圍取自 tools/package.sh 的 SHIP 清單，也就是真正會進 zip 的檔案。
           # 不能掃整個 repo：tests/ 與 tools/ 都合法地用 fetch 驅動 CDP，
           # 那些不會被打包，掃它們只會製造假警報（本次 CI 就誤報過一次）。
-          files=$(bash tools/package.sh --list | grep -E '\.(js|html)$' || true)
+          #
+          # 清單為空必須大聲失敗，不可當成「沒違規」。`echo "" | xargs grep` 會讓 grep
+          # 讀到空 stdin 而直接回報無匹配，於是 package.sh 改壞、SHIP 清單被清空、或副檔名
+          # 篩選失準時，這道守門會退化成永遠綠燈 —— 還會理直氣壯地印「確認 1 個檔案」。
+          # 兩道防線：list 用 set -e 擋 package.sh 本身失敗，files 空則自己 exit 1。
+          list=$(bash tools/package.sh --list)
+          files=$(echo "$list" | grep -E '\.(js|html)$' || true)
+          if [ -z "$files" ]; then
+            echo "::error::打包清單裡找不到任何 .js/.html —— 掃描範圍為空，這道守門等於沒跑"
+            exit 1
+          fi
+          count=$(echo "$files" | wc -l | tr -d ' ')
           hits=$(echo "$files" | xargs grep -nE "fetch\(|XMLHttpRequest|navigator\.sendBeacon" || true)
           if [ -n "$hits" ]; then
             echo "::error::打包檔案裡發現對外連線的呼叫，與 PRIVACY.md 的承諾牴觸："
             echo "$hits"
             exit 1
           fi
-          echo "確認 $(echo "$files" | wc -l | tr -d ' ') 個打包檔案中無對外連線呼叫"
+          echo "確認 $count 個打包檔案中無對外連線呼叫"
 
       - name: manifest 宣告的圖示都要存在，且尺寸正確
         run: |
