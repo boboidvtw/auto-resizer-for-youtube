@@ -5,27 +5,36 @@
 > **商店網址**：<https://chromewebstore.google.com/detail/auto-resizer-for-youtube/kbeeadfnblmodcbjhijdkoebfejkncgd>
 > **商店版擴充功能 ID**：`kbeeadfnblmodcbjhijdkoebfejkncgd`（由 Google 指派，與未封裝安裝的路徑推導 ID 無關）
 >
-> ⚠️ **送審時必改的兩個欄位**（2026-08-07 開公開商店頁複查，兩者都還是改名前的舊網址）：
+> ## ✅ v3.0.1 已於 2026-08-08 上架，改名遺留的舊網址全部清除
 >
-> | Dashboard 欄位 | 線上現況 | 應改為 |
-> |---|---|---|
-> | **Support URL** | `.../youtube-auto-resizer-extension/issues` | `https://github.com/boboidvtw/auto-resizer-for-youtube/issues` |
-> | **說明文案的「OPEN SOURCE / issue tracker」段落** | `.../youtube-auto-resizer-extension` | 照本檔第 123 / 167 行貼 |
+> 線上實測（`Version` 欄位 = `3.0.1`、舊網址殘留 `0` 次）：
 >
-> Support URL 已於 2026-08-06 提交，**至 2026-08-07 仍未過審**（商店資訊修改也要過審，
-> 不是即時生效）。說明文案那一處**從來沒有提交過** —— 本檔在 v3.0.0 送審後才更新成新網址，
-> Dashboard 沒有跟著回填。**版控裡的副本是對的、線上的是舊的，`grep` 只掃得到前者。**
+> | Dashboard 欄位 | 結果 |
+> |---|---|
+> | **Support URL** | ✅ 已是 `.../auto-resizer-for-youtube/issues`（2026-08-06 提交，08-07 過審） |
+> | **說明文案的「OPEN SOURCE / issue tracker」段落** | ✅ 已隨 v3.0.1 一併更新 |
 >
-> 驗證方式一律是開公開商店頁抓，不是看 Dashboard 顯示什麼：
+> ### 這次踩到的坑，改版時請重讀
+>
+> 說明文案那一處**從 v3.0.0 上架起就是舊網址，而且一直沒有人發現** ——
+> 本檔在 v3.0.0 **送審之後**才更新成新網址，Dashboard 沒有跟著回填。
+> 於是**版控裡的副本是對的、線上的是舊的，`grep` 只掃得到前者**，
+> 靠掃 repo 永遠查不出來。原本只追蹤 Support URL，是實際抓公開商店頁的 HTML
+> 逐一看命中位置才發現有第二個欄位。
+>
+> **推論：凡是商店後台的欄位，都必須以公開商店頁為準去驗，而且要看命中的「位置」，
+> 不能只看命中「次數」。** 次數從 3 掉到 2 看起來像進展，實際上是兩個不同欄位各自的狀態。
+>
+> 驗證指令（回 `0` 且 `Version` 為預期版號才算生效）：
 >
 > ```bash
 > curl -s "https://chromewebstore.google.com/detail/auto-resizer-for-youtube/kbeeadfnblmodcbjhijdkoebfejkncgd" \
->   | grep -c "youtube-auto-resizer-extension"
+>   | grep -oE 'Version</div><div[^>]*>[^<]*|youtube-auto-resizer-extension' | sort | uniq -c
 > ```
 >
-> 回 `0` 才是兩個欄位都生效。
->
 > 本檔以下內容保留為**改版重傳時的填表依據**。
+> ⚠️ 改動 `manifest.json` / `_locales/` / `PRIVACY.md` 後要回來同步這一份，
+> **並且記得 Dashboard 也要跟著改** —— 這一份對了不代表線上對了。
 
 > 對應 v3.0.0 · 建立 2026-08-05
 > 所有欄位的值都取自本 repo 的實際檔案（`manifest.json` / `_locales/` / `PRIVACY.md`），

@@ -1,6 +1,7 @@
 # Project Context & Handoff Log - Auto Resizer for YouTube™
 
-> Last Closed: 2026-08-07（**Next Session Goals 的 4 項全部處理完畢**；見下方「2026-08-07」段落）
+> Last Closed: 2026-08-08（**v3.0.1 已上架**，改名遺留的舊網址全部清除；見下方「2026-08-08」段落）
+> 前一版：2026-08-07（**Next Session Goals 的 4 項全部處理完畢**；見下方「2026-08-07」段落）
 > 前一版：2026-08-06T17:52:36+08:00 (**v3.0.0 已上架 Chrome Web Store**；
 > 商店圖示產生腳本 + 留白守門；repo 與本機資料夾改名為 `auto-resizer-for-youtube`)
 > 前一版：2026-08-05T14:56:07+08:00 (v3.0.0 收尾 — 商店素材補齊，程式碼零變更)
@@ -13,6 +14,42 @@
 已補進版控並在 `store-assets/store-listing.md` 的素材表登記。
 單元 + i18n 測試 **70/70 綠**（`node --test tests/unit.test.js tests/i18n.test.js`）；
 e2e 本次未重跑（需要 Brave + 真實 YouTube，程式碼未動故沿用 v3.0.0 的結果）。
+
+## 🚀 2026-08-08 — v3.0.1 已上架，改名遺留的舊網址全部清除
+
+線上實測（公開商店頁，非 Dashboard）：`Version` = **3.0.1**、`Updated` = August 8, 2026、
+舊網址 `youtube-auto-resizer-extension` 殘留 **0 次**、新網址 2 次。
+
+| 欄位 | 結果 |
+|---|---|
+| 套件版本 | ✅ 3.0.1 |
+| Support URL | ✅ 2026-08-06 提交 → 08-07 過審 |
+| 說明文案的 OPEN SOURCE 段落 | ✅ 隨 v3.0.1 一併更新 |
+
+### 這次真正值得記的：兩個欄位、兩種失效方式
+
+1. **Support URL** —— 有提交、但商店資訊修改也要過審，08-07 才生效。
+   「Dashboard 顯示已改」不等於線上已改。
+2. **說明文案裡的網址** —— **從 v3.0.0 上架起就是舊的，而且從未提交過修改**。
+   `store-assets/store-listing.md` 在 v3.0.0 **送審之後**才更新成新網址，Dashboard 沒回填。
+   於是**版控裡的副本是對的、線上的是舊的**，掃 repo 永遠查不出來。
+
+⚠️ **最容易誤判的一步**：驗證指令回的次數從 3 → 2 看起來像「快好了」，
+實際上那是**兩個不同欄位各自的狀態**。是把 HTML 抓下來逐一看命中位置才發現有第二個欄位的。
+**看命中「位置」，不要只看命中「次數」。**
+
+推論：凡是商店後台的欄位（版控外的一份副本），一律以公開商店頁為準去驗，
+而且要驗到具體位置。同課題見 `feedback_verify_browser_not_curl_status`。
+
+### 上架後的維運
+
+- 監看 Dashboard 的評分／使用者數。
+- YouTube Polymer 版面若改動（`theater` / `full-bleed-player` 屬性名、`#columns` 的
+  min-width 算法）會讓版面邏輯失效。
+- 下次改版流程不變：改 `manifest.json` 版號 → 補 `CHANGELOG.md` 段落（CI 會擋不一致）→
+  `bash tools/package.sh` → 上傳新 zip。**同一版號只能上傳一次。**
+
+---
 
 ## 🧹 2026-08-07 — 清掉 Next Session Goals 的四項待辦
 
@@ -316,10 +353,10 @@ Chrome 工具列實際顯示的就是 16px —— 256 個像素撐不起四個�
       測試也拿它當對照組——否則檢查退化成「永遠通過」不會有人發現。
 - [ ] **送審**：上傳 `dist/auto-resizer-for-youtube-v3.0.0.zip`，填表照 `store-assets/store-listing.md`。
 - [x] ~~上架後把商店連結補進 README、專案首頁與 `bobo-labs` 的 project card~~ **2026-08-05 完成**。
-- [ ] **確認 Support URL 的修正已過審**（2026-08-06 提交；**2026-08-07 複查仍未生效**，
-      curl 回 3 而非 0）。商店資訊修改要過審才上線，不是即時生效。
-      ⚠️ 同時發現**商店說明的「OPEN SOURCE / issue tracker」段落也還是舊網址且從未提交修改**，
-      下次送審要兩個欄位一起改（見上方 🎉 段落的 2026-08-07 複查表）。
+- [x] ~~**確認 Support URL 的修正已過審**~~ **2026-08-08 結案**：線上實測 `Version` = 3.0.1、
+      舊網址殘留 0 次。Support URL（08-06 提交、08-07 過審）與**說明文案那一處**
+      （從 v3.0.0 起就是舊的、從未提交過修改）都已清除。
+      教訓見下方「2026-08-08」段落。
 
 ---
 

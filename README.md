@@ -4,7 +4,7 @@
 > Resize the YouTube player to fit your window, quality and **display**, lock playback quality, and pop the video out
 > onto the screen you choose — 4K and multi-monitor aware, Manifest V3.
 
-[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-v3.0.0-4285F4.svg)](https://chromewebstore.google.com/detail/auto-resizer-for-youtube/kbeeadfnblmodcbjhijdkoebfejkncgd)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-v3.0.1-4285F4.svg)](https://chromewebstore.google.com/detail/auto-resizer-for-youtube/kbeeadfnblmodcbjhijdkoebfejkncgd)
 [![CI](https://github.com/boboidvtw/auto-resizer-for-youtube/actions/workflows/test.yml/badge.svg)](https://github.com/boboidvtw/auto-resizer-for-youtube/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-brightgreen.svg)](https://developer.chrome.com/docs/extensions/mv3/intro/)
@@ -76,7 +76,7 @@ grep -rniE "fetch\(|XMLHttpRequest|https?://" --include="*.js" --include="*.html
 
 ## 🚀 安裝 (Installation)
 
-**[▸ Chrome 線上應用程式商店](https://chromewebstore.google.com/detail/auto-resizer-for-youtube/kbeeadfnblmodcbjhijdkoebfejkncgd)**（v3.0.0，2026-08-05 上架）
+**[▸ Chrome 線上應用程式商店](https://chromewebstore.google.com/detail/auto-resizer-for-youtube/kbeeadfnblmodcbjhijdkoebfejkncgd)**（v3.0.1，2026-08-08 更新）
 
 Chrome、Brave、Edge 等 Chromium 瀏覽器皆可安裝。
 
@@ -203,11 +203,9 @@ EXPECT_PORTRAIT=1 VIDEO="https://www.youtube.com/watch?v=<直式影片>" bash te
 
 見 [CHANGELOG.md](CHANGELOG.md)。
 
-**v3.0.1**（2026-08-07）是版面修正版：非 16:9 影片（直式 Shorts、超寬 21:9）原本一律被當成
-16:9，直式影片的可見影像因此比不裝擴充功能還小 14.8%。16:9 影片產生的 CSS 逐字不變。
-
-> ⏳ 上方的商店徽章仍是 **v3.0.0** —— 那是**目前線上實際供應的版本**。
-> v3.0.1 送審通過後才會更新徽章。
+**v3.0.1**（2026-08-08 上架）是版面修正版：非 16:9 影片（直式 Shorts、超寬 21:9）原本一律被
+當成 16:9，直式影片的可見影像因此比不裝擴充功能還小 14.8%。16:9 影片產生的 CSS 逐字不變，
+所以絕大多數使用者不會看到任何差異。
 
 **v3.0.0**（2026-08-05）是上架前的合規整備：改名、自製圖示、修復被改壞的 MIT 授權條款、
 三語在地化、隱私權政策。
