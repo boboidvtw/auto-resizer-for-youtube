@@ -1,7 +1,11 @@
 # Project Context & Handoff Log - Auto Resizer for YouTube™
 
-> Last Closed: 2026-08-08（**v3.0.1 已上架**，改名遺留的舊網址全部清除；見下方「2026-08-08」段落）
-> 前一版：2026-08-07（**Next Session Goals 的 4 項全部處理完畢**；見下方「2026-08-07」段落）
+> Last Closed: 2026-08-09T20:50+08:00（**v3.0.1 已上架並驗證**；本輪四項待辦全部結清）
+> 前一版：2026-08-08（v3.0.1 上架、改名遺留的舊網址全部清除；見下方「2026-08-08」段落）
+> 更前一版：2026-08-07（Next Session Goals 的 4 項處理完畢；見下方「2026-08-07」段落）
+
+**目前狀態**：無阻塞待辦。商店線上為 v3.0.1，repo 與 origin 同步，單元 98/98、
+e2e 內建 40/40、4K 46/46 全綠。下次開工可直接看本檔最下方的 Next Session Goals。
 > 前一版：2026-08-06T17:52:36+08:00 (**v3.0.0 已上架 Chrome Web Store**；
 > 商店圖示產生腳本 + 留白守門；repo 與本機資料夾改名為 `auto-resizer-for-youtube`)
 > 前一版：2026-08-05T14:56:07+08:00 (v3.0.0 收尾 — 商店素材補齊，程式碼零變更)
@@ -667,6 +671,37 @@ Brave 會拿它們覆蓋之後每一個 `chrome.windows.create` 的座標而且�
 
 ## 🎯 Next Session Goals
 
+> **2026-08-09 現況：沒有阻塞項。** v3.0.1 已上架驗證，四項舊待辦全部結清。
+> 以下是還開著的觀察／技術債，全部可以慢慢來。
+
+### 還開著的（依重要性）
+
+- [ ] **`yarDisplayCeilingWidth()` 估算螢幕容量時仍固定用 16:9**（review 的 MEDIUM）。
+      刻意保留：只把長寬比接進去會讓直式影片**要到更低的畫質**，因為下游的
+      `yarQualityForPlayer()` 比對的也是 `YAR_QUALITY_WIDTH`（16:9 的寬度表）。
+      要修得兩者一起變成長寬比感知。現況方向是「寧可多要一點畫質」，不會讓畫面變糊，
+      所以不急。詳見 `src/quality-policy.js` 的函式註解。
+- [ ] **YouTube 逐 session 決定 Shorts 送 9:16 還是 padded 16:9**，觸發條件未查明。
+      已排除：`setPlaybackQuality` vs `setPlaybackQualityRange`（兩者都保住 9:16）、
+      冷啟 vs 先開首頁（`tests/goto.js` 導航當下量到 1080x1920，走完 e2e 前段後變 1280x720）。
+      e2e 的直式區塊拿不到 9:16 就大聲略過，守門在 `unit.test.js`，所以這不擋任何事。
+- [ ] **觀察 Chromium 更新後 YouTube Polymer 版面變化** —— `theater` /
+      `full-bleed-player` 兩個屬性名仍是外部相依（`is-two-columns_` 已在 v2.2.0 拿掉）。
+      YouTube 若改用別的變數算 `#columns` 的 min-width，換行邏輯也會失效。
+- [ ] **上架後維運**：監看 Dashboard 的評分與使用者數。
+
+### 改版時必讀
+
+- 流程：改 `manifest.json` 版號 → 補 `CHANGELOG.md` 對應段落（CI 會擋不一致）→
+  `bash tools/package.sh` → 上傳新 zip。**同一版號只能上傳一次。**
+- 商店後台是版控外的一份副本：`store-assets/store-listing.md` 對了**不代表**線上對了。
+  改動 `manifest.json` / `_locales/` / `PRIVACY.md` 後要同步那一份，**並且回 Dashboard 改**。
+  驗證一律開公開商店頁抓，看命中「位置」不要只看「次數」。
+
+---
+
+### 已結案（保留供查閱）
+
 - [x] ~~**拖曳視窗跨螢幕的即時反應未實測**~~ **2026-08-04 手動實測完成，見下方「跨螢幕拖曳實測」。**
 - [x] ~~**`content.js` 已 661 行**~~ **2026-08-07 完成**：抽出 `src/quality-policy.js` 與
       `src/window-fit.js`，662 → 581 行，並加了 800 行的守門測試。
@@ -688,6 +723,4 @@ Brave 會拿它們覆蓋之後每一個 `chrome.windows.create` 的座標而且�
       剩下未測的多螢幕子題：**把視窗從一台拖到另一台**時的即時反應。
       已實作 `matchMedia('(resolution: Ndppx)')` 監看 + 500ms debounce 的 resize 重算，
       但只在同一台螢幕上縮放驗過，沒有真的拖曳跨螢幕測過（CDP 不好模擬，需手動）。
-- [ ] 觀察 Chromium 更新後 YouTube Polymer 版面變化——
-      `theater` / `full-bleed-player` 兩個屬性名仍是外部相依（`is-two-columns_` 已在 v2.2.0 拿掉）。
-      YouTube 若改用別的變數算 `#columns` 的 min-width，換行邏輯也會失效。
+（Chromium / Polymer 的觀察項已移到本節開頭的「還開著的」清單，此處不重複。）
