@@ -58,6 +58,39 @@ Both the wrap decision and the width are pure CSS, so the browser reflows on its
 
 ---
 
+## ❓ 常見問題：為何瀏覽器視窗沒有隨畫質自動變更大小？ (FAQ: Window Sizing)
+
+### 1. 預設行為：調整「網頁內部播放器」，非「整個瀏覽器視窗」
+本擴充功能預設的核心價值在於 **「在 YouTube 頁面內部將播放器（`#movie_player`）依照畫質與螢幕空間自動放大並去除留白（`autoByQuality` 模式）」**。
+
+為了避免在使用者日常瀏覽其他分頁或一般網頁時非預期地竄改整個瀏覽器視窗大小，**「同步調整瀏覽器視窗尺寸 (Resize the browser window to match)」在設定中預設為關閉**。
+
+---
+
+### 2. 如何讓視窗自動隨畫質縮放？兩種使用方式：
+
+#### 🌟 方式 A（最推薦）：使用「彈出式播放器 (Pop-out Player)」
+- **操作方式**：在任何 YouTube 影片頁面，點擊播放控制列右下角（全螢幕按鈕旁）的「彈出播放器」按鈕。
+- **特點**：
+  - 開啟獨立、乾淨且無網址列、無推薦側欄的純播放視窗。
+  - 視窗尺寸**完全自動跟隨當前影片畫質與長寬比**，並經由閉環校正精準貼合、零黑邊。
+
+#### ⚙️ 方式 B：啟用「同步調整瀏覽器視窗尺寸」
+- **操作方式**：
+  1. 點擊瀏覽器工具列上的擴充功能圖示開啟設定面板。
+  2. 勾選最下方的 **「同步調整瀏覽器視窗尺寸 (Resize the browser window to match)」**。
+- **使用時的注意事項與機制說明**：
+  1. **視窗必須處於非最大化（Normal）狀態**：
+     - 若瀏覽器處於 Windows 視窗最大化或 macOS 綠色按鈕全螢幕狀態，作業系統與瀏覽器 API（`chrome.windows.update`）受系統限制無法直接修改寬高。請先將瀏覽器視窗還原成一般可自由調整大小的視窗狀態。
+  2. **降畫質有 4 秒防抖動延遲（Quality Shrink Settle）**：
+     - YouTube 的自適應碼率（ABR）在影片剛開始播放時，通常會由低往上爬升（例如 `medium` ➔ `720p` ➔ `1080p`）。為了防止視窗在開播前 10 秒連續震盪跳動，系統設計為：**升畫質立即放大視窗，但降畫質需持續穩定 4 秒才會縮小視窗**。若手動切換至較低畫質，請稍候數秒。
+  3. **螢幕感知（Display Adaptation）與手動選畫質**：
+     - 當偏好畫質設為 `Auto` 且啟用「依螢幕自動拉高畫質」時，擴充功能會主動根據螢幕解析度（如 Retina @2x 或 4K）向 YouTube 索取適合當前視窗的高畫質。
+     - 若希望由特定畫質鎖定視窗尺寸，建議在設定面板的 **「偏好畫質 (Preferred quality)」** 直接指定（例如 `1080p` 或 `720p`），避免手動調整與自動螢幕適配產生拉扯。
+  4. **最小視窗寬度安全保護**：
+     - 當播放低解析度影片（如 144p 或 240p）時，為避免視窗過小導致播放器控制列破損，內部設有最小寬度保護（426px 播放器寬 + 瀏覽器外框）。
+
+
 ## 🔒 隱私 (Privacy)
 
 **不收集任何資料。** 沒有伺服器、沒有分析工具、沒有遠端程式碼、沒有任何對外連線。
@@ -212,9 +245,11 @@ EXPECT_PORTRAIT=1 VIDEO="https://www.youtube.com/watch?v=<直式影片>" bash te
 
 ---
 
-## ☕ 贊助 (Sponsor)
+## ❤️ 贊助與支持 (Sponsor & Support)
 
-如果這東西對你有用，可以[請我喝杯咖啡](https://www.paypal.me/boboidvtw)。
+[![Donate with PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg?style=for-the-badge&logo=paypal)](https://www.paypal.me/boboidvtw)
+
+如果這個專案對你有幫助，歡迎透過 PayPal 贊助支持本專案的持續維護與開發！❤️
 
 ## 📄 授權 (License)
 
